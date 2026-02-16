@@ -1,0 +1,28 @@
+# Project Brief
+
+## Overview
+<!-- What is this project? One paragraph. -->
+
+## Tech Stack
+<!-- What language/framework/tools should be used? -->
+<!-- Leave blank if you want Claude to decide. -->
+
+## Features (Priority Order)
+<!-- List features from most to least important. -->
+<!-- The pipeline works through these phase by phase. -->
+
+1. **Feature One** — Description
+2. **Feature Two** — Description
+3. **Feature Three** — Description
+
+## Constraints
+<!-- Any hard requirements, limitations, or preferences. -->
+<!-- Examples: "Must use PostgreSQL", "No external APIs", "Needs auth" -->
+
+## Testing
+<!-- What test framework? What should be tested? -->
+<!-- Example: "Jest for unit tests, Playwright for e2e" -->
+
+## Definition of Done
+<!-- How many phases? When is the project complete? -->
+<!-- Example: "~4 phases for MVP, complete when all features above work with tests passing" -->

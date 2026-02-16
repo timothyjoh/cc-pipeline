@@ -1,0 +1,76 @@
+# Pipeline Workflow Configuration
+# The engine (run.sh) reads this file to determine step order, agents, and routing.
+
+# Agents:
+#   claude-piped       → claude -p [--model <model>] --dangerously-skip-permissions "<prompt>"
+#   claude-interactive → claude [--model <model>] --dangerously-skip-permissions (in tmux, load-buffer/paste-buffer)
+#   codex-exec         → codex exec [--model <model>] "<prompt>"
+#   codex-interactive  → codex [--model <model>] (in tmux, load-buffer/paste-buffer)
+#   bash               → run command directly, no AI
+#
+# Models (optional — omit to use CLI default):
+#   Claude: opus, sonnet, haiku
+#   Codex:  o3, o4-mini, etc.
+
+name: "Default Pipeline"
+version: 1
+
+phases_dir: "docs/phases"
+
+steps:
+  - name: spec
+    description: "Break project vision into phase spec"
+    agent: claude-piped
+    # model: sonnet
+    prompt: prompts/spec.md
+    output: "SPEC.md"
+
+  - name: research
+    description: "Analyze current codebase state"
+    agent: claude-piped
+    # model: sonnet
+    prompt: prompts/research.md
+    output: "RESEARCH.md"
+
+  - name: plan
+    description: "Create actionable implementation plan"
+    agent: claude-piped
+    # model: sonnet
+    prompt: prompts/plan.md
+    output: "PLAN.md"
+
+  - name: build
+    description: "Implement the plan with agent teams"
+    agent: claude-interactive
+    prompt: prompts/build.md
+    test_gate: true
+
+  - name: review
+    description: "Staff engineer code + test review"
+    agent: claude-piped
+    # agent: codex-exec        # Uncomment for second-opinion review
+    # model: o3
+    prompt: prompts/review.md
+    output: "REVIEW.md"
+
+  - name: fix
+    description: "Address review findings"
+    agent: claude-interactive
+    prompt: prompts/fix.md
+    skip_unless: "MUST-FIX.md"
+    test_gate: true
+
+  - name: reflect
+    description: "Look back + look forward for next phase"
+    agent: claude-piped
+    prompt: prompts/reflect.md
+    output: "REFLECTIONS.md"
+
+  - name: commit
+    description: "Git commit + push"
+    agent: bash
+    command: "git add -A && git commit -m 'Phase {{PHASE}} complete' && git push origin master"
+
+# Usage tracking
+usage_check:
+  when: phase_boundary    # pipeline_start, phase_boundary, every_step
