@@ -60,7 +60,7 @@ export function readEvents(logFile) {
  * - Find last event matching: step_start, step_done, step_complete, step_skip, phase_complete
  * - Derive state based on event type:
  *   - step_start → { phase, step, status: 'running' }
- *   - step_done/step_complete/step_skip → { phase, step, status: 'complete' }
+ *   - step_done/step_skip → { phase, step, status: 'complete' }
  *   - phase_complete → { phase, step: 'done', status: 'complete' }
  *   - No relevant events → { phase: 1, step: 'pending', status: 'ready' }
  *
@@ -75,7 +75,7 @@ export function getCurrentState(logFile) {
   }
 
   // Find last relevant event
-  const relevantEvents = ['step_start', 'step_done', 'step_complete', 'step_skip', 'phase_complete'];
+  const relevantEvents = ['step_start', 'step_done', 'step_skip', 'phase_complete'];
   const lastEvent = events
     .filter(e => relevantEvents.includes(e.event))
     .pop();
@@ -90,7 +90,6 @@ export function getCurrentState(logFile) {
     case 'step_start':
       return { phase, step, status: 'running' };
     case 'step_done':
-    case 'step_complete':
     case 'step_skip':
       return { phase, step, status: 'complete' };
     case 'phase_complete':

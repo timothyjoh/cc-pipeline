@@ -3,6 +3,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { getCurrentState, appendEvent, deriveResumePoint } from './state.js';
 import { loadConfig } from './config.js';
 import { printBanner } from './logger.js';
+import { agentState } from './agents/base.js';
+import { BashAgent } from './agents/bash.js';
+import { ClaudePipedAgent } from './agents/claude-piped.js';
+import { ClaudeInteractiveAgent } from './agents/claude-interactive.js';
 
 const MAX_PHASES = 20;
 
@@ -42,14 +46,43 @@ export async function runEngine(projectDir, options = {}) {
   printBanner(config, projectDir, state);
   console.log(`\nResumed state: phase=${resumePoint.phase} step=${resumePoint.stepName} status=${state.status}`);
 
-  // Signal handling — track interrupted state and allow cancelling sleep
+  // Signal handling — track interrupted state, kill child processes, and allow cancelling sleep
   let interrupted = false;
   let cancelSleep = null;
 
   const handleSignal = (signal) => {
     console.log(`\nReceived ${signal}, shutting down gracefully...`);
     interrupted = true;
+    agentState.setInterrupted(true);
     if (cancelSleep) cancelSleep();
+
+    // Kill current child process if any
+    const child = agentState.getChild();
+    if (child && child.pid) {
+      console.log(`Terminating child process ${child.pid}...`);
+
+      // Send SIGTERM first
+      try {
+        process.kill(child.pid, 'SIGTERM');
+      } catch (err) {
+        // Process may have already exited
+      }
+
+      // Send SIGKILL after 2 seconds if still running
+      setTimeout(() => {
+        try {
+          process.kill(child.pid, 'SIGKILL');
+        } catch (err) {
+          // Process already exited, ignore
+        }
+      }, 2000);
+    }
+
+    // Exit after cleanup — use correct exit code per signal
+    const exitCode = signal === 'SIGTERM' ? 143 : 130;
+    setTimeout(() => {
+      process.exit(exitCode);
+    }, 3000);
   };
   process.on('SIGINT', handleSignal);
   process.on('SIGTERM', handleSignal);
@@ -93,7 +126,7 @@ export async function runEngine(projectDir, options = {}) {
         }
 
         const stepDef = config.steps[i];
-        await runStep(phase, stepDef, projectDir, config, logFile);
+        await runStep(phase, stepDef, projectDir, config, logFile, options);
       }
 
       // Phase complete
@@ -138,7 +171,7 @@ export async function runEngine(projectDir, options = {}) {
  * @param {object} config - Full config object
  * @param {string} logFile - Path to JSONL log
  */
-async function runStep(phase, stepDef, projectDir, config, logFile) {
+async function runStep(phase, stepDef, projectDir, config, logFile, options = {}) {
   const { name: stepName, agent, skipUnless, output, testGate } = stepDef;
 
   // Check skipUnless condition
@@ -156,8 +189,8 @@ async function runStep(phase, stepDef, projectDir, config, logFile) {
     }
   }
 
-  // Log step start
-  const model = stepDef.model || 'default';
+  // CLI --model overrides workflow.yaml per-step model
+  const model = options.model || stepDef.model || 'default';
   appendEvent(logFile, {
     event: 'step_start',
     phase,
@@ -168,34 +201,46 @@ async function runStep(phase, stepDef, projectDir, config, logFile) {
 
   console.log(`\nRunning step: ${stepName} (phase ${phase}, agent: ${agent})`);
 
-  // Route to agent
-  // NOTE: Actual agent implementations are Phase 2 work
-  // For now, just simulate execution
-  switch (agent) {
-    case 'claude-piped':
-      console.log(`  [STUB] Would run: claude -p with prompt ${stepDef.prompt}`);
-      break;
-    case 'claude-interactive':
-    case 'codex-interactive':
-      console.log(`  [STUB] Would run: ${agent} in tmux with prompt ${stepDef.prompt}`);
-      break;
-    case 'bash':
-      console.log(`  [STUB] Would run: ${stepDef.command}`);
-      break;
-    default:
-      throw new Error(`Unknown agent: ${agent}`);
+  // Route to agent and execute
+  let result;
+  const context = { projectDir, config, logFile };
+  const promptPath = stepDef.prompt || null;
+
+  try {
+    switch (agent) {
+      case 'bash': {
+        const bashAgent = new BashAgent();
+        result = await bashAgent.run(phase, stepDef, promptPath, model, context);
+        break;
+      }
+      case 'claude-piped': {
+        const pipedAgent = new ClaudePipedAgent();
+        result = await pipedAgent.run(phase, stepDef, promptPath, model, context);
+        break;
+      }
+      case 'claude-interactive':
+      case 'codex-interactive': {
+        const interactiveAgent = new ClaudeInteractiveAgent();
+        result = await interactiveAgent.run(phase, stepDef, promptPath, model, context);
+        break;
+      }
+      default:
+        throw new Error(`Unknown agent: ${agent}`);
+    }
+  } catch (err) {
+    console.error(`Error executing agent ${agent}: ${err.message}`);
+    result = { exitCode: 1, outputPath: null };
   }
 
-  // Simulate work
-  await sleep(500);
-
   // Log step done
+  const status = result.exitCode === 0 ? 'ok' : 'error';
   appendEvent(logFile, {
     event: 'step_done',
     phase,
     step: stepName,
     agent,
-    status: 'ok',
+    status,
+    exitCode: result.exitCode,
   });
 
   // Validate output if specified
@@ -223,12 +268,5 @@ async function runStep(phase, stepDef, projectDir, config, logFile) {
   if (testGate === true) {
     console.log(`  [STUB] Would run test gate for ${stepName}`);
   }
-
-  // Log step complete
-  appendEvent(logFile, { event: 'step_complete', phase, step: stepName });
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
