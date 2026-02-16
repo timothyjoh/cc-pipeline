@@ -7,33 +7,41 @@ export function status(projectDir) {
 
   // Check if log file exists
   if (!existsSync(logFile)) {
-    console.log('No pipeline.jsonl found. Pipeline has not started yet.');
+    console.log('\n╔════════════════════════════════════════════════════╗');
+    console.log('║  Pipeline Status: Not Started                      ║');
+    console.log('╚════════════════════════════════════════════════════╝');
+    console.log('\nNo pipeline.jsonl found. Run `cc-pipeline run` to start.');
     return;
   }
 
   try {
     // Get current state
     const currentState = getCurrentState(logFile);
+    const events = readEvents(logFile);
 
     // Display current state
-    console.log('\n=== Pipeline Status ===');
-    console.log(`Phase: ${currentState.phase}`);
-    console.log(`Step: ${currentState.step}`);
-    console.log(`Status: ${currentState.status}`);
+    console.log('\n╔════════════════════════════════════════════════════╗');
+    console.log('║  Pipeline Status                                   ║');
+    console.log('╠════════════════════════════════════════════════════╣');
+    console.log(`║  Phase:  ${String(currentState.phase).padEnd(42)} ║`);
+    console.log(`║  Step:   ${String(currentState.step).padEnd(42)} ║`);
+    console.log(`║  Status: ${String(currentState.status).padEnd(42)} ║`);
+    console.log('╚════════════════════════════════════════════════════╝');
 
     // Show last 10 events
-    const events = readEvents(logFile);
     const recentEvents = events.slice(-10);
 
-    console.log('\n=== Recent Events (last 10) ===');
+    console.log('\nRecent Events (last 10):');
+    console.log('─'.repeat(52));
     recentEvents.forEach(evt => {
       const { ts, event, ...rest } = evt;
-      const timestamp = new Date(ts).toLocaleString();
+      const time = new Date(ts).toLocaleTimeString();
       const fields = Object.entries(rest)
         .map(([k, v]) => `${k}=${v}`)
         .join(' ');
-      console.log(`[${timestamp}] ${event} ${fields}`);
+      console.log(`${time} │ ${event.padEnd(18)} │ ${fields}`);
     });
+    console.log('─'.repeat(52));
   } catch (err) {
     console.error(`Failed to read status: ${err.message}`);
     process.exit(1);

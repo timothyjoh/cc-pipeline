@@ -49,12 +49,17 @@ export async function runEngine(projectDir, options = {}) {
   // Signal handling — track interrupted state, kill child processes, and allow cancelling sleep
   let interrupted = false;
   let cancelSleep = null;
+  let phase = resumePoint.phase;
+  let currentStepName = resumePoint.stepName;
 
   const handleSignal = (signal) => {
     console.log(`\nReceived ${signal}, shutting down gracefully...`);
     interrupted = true;
     agentState.setInterrupted(true);
     if (cancelSleep) cancelSleep();
+
+    // Write interrupted event
+    appendEvent(logFile, { event: 'interrupted', phase, step: currentStepName });
 
     // Kill current child process if any
     const child = agentState.getChild();
@@ -93,9 +98,7 @@ export async function runEngine(projectDir, options = {}) {
   };
 
   try {
-    // Main loop
-    let phase = resumePoint.phase;
-    let currentStepName = resumePoint.stepName;
+    // Main loop (phase and currentStepName already declared above for signal handler)
     let phasesRun = 0;
 
     const phaseLimit = options.phases || 0;

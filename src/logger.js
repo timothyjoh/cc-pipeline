@@ -16,21 +16,40 @@ const COLORS = {
 export function printBanner(config, projectDir, currentState) {
   const workflowName = config.name || 'Pipeline';
   const projectName = projectDir.split('/').pop();
-  const stepNames = config.steps.map(s => s.name).join(', ');
+  const BOX_WIDTH = 60;
+
+  // Helper to pad line with spaces and add right border
+  const boxLine = (text, color = '') => {
+    const stripped = text.replace(/\x1b\[[0-9;]*m/g, ''); // Remove ANSI codes for length calc
+    const padding = ' '.repeat(Math.max(0, BOX_WIDTH - 2 - stripped.length));
+    return `║ ${color}${text}${COLORS.reset}${padding} ║`;
+  };
 
   const lines = [
-    '╔═══════════════════════════════════════╗',
-    `║   ${workflowName}`,
-    `║   Project: ${projectName}`,
-    `║   Steps: ${COLORS.cyan}${stepNames}${COLORS.reset}`,
+    '╔' + '═'.repeat(BOX_WIDTH) + '╗',
+    boxLine(`${COLORS.cyan}${workflowName}${COLORS.reset}`),
+    boxLine(`Project: ${projectName}`),
+    boxLine(''),
   ];
 
-  if (currentState) {
-    const stateStr = `phase=${currentState.phase} step=${currentState.step}`;
-    lines.push(`║   State: ${COLORS.dim}${stateStr}${COLORS.reset}`);
+  // Show steps with current step highlighted
+  lines.push(boxLine('Pipeline Steps:', COLORS.yellow));
+  config.steps.forEach((step, idx) => {
+    const isCurrent = currentState && step.name === currentState.step;
+    const marker = isCurrent ? `${COLORS.cyan}▶${COLORS.reset}` : ' ';
+    const stepText = `${marker} ${idx + 1}. ${step.name}`;
+    const stepColor = isCurrent ? COLORS.cyan : '';
+    lines.push(boxLine(stepText, stepColor));
+  });
+
+  // Show phase and status
+  if (currentState && currentState.phase) {
+    lines.push(boxLine(''));
+    const phaseText = `Phase: ${currentState.phase} | Status: ${currentState.status}`;
+    lines.push(boxLine(phaseText, COLORS.dim));
   }
 
-  lines.push('╚═══════════════════════════════════════╝');
+  lines.push('╚' + '═'.repeat(BOX_WIDTH) + '╝');
 
   lines.forEach(line => console.log(line));
 }
