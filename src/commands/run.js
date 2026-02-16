@@ -1,6 +1,10 @@
-// Placeholder — engine.js will power this
-export function runPipeline(projectDir, options = {}) {
-  console.log('TODO: Run pipeline engine');
-  console.log('  projectDir:', projectDir);
-  console.log('  options:', options);
+import { runEngine } from '../engine.js';
+
+export async function runPipeline(projectDir, options = {}) {
+  try {
+    await runEngine(projectDir, options);
+  } catch (err) {
+    console.error(`Pipeline failed: ${err.message}`);
+    process.exit(1);
+  }
 }

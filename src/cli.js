@@ -20,7 +20,7 @@ Examples:
   npx cc-pipeline status
 `.trim();
 
-export function run(args) {
+export async function run(args) {
   const command = args[0];
 
   if (!command || command === '--help' || command === '-h') {
@@ -35,7 +35,7 @@ export function run(args) {
       init(process.cwd(), options);
       break;
     case 'run':
-      runPipeline(process.cwd(), options);
+      await runPipeline(process.cwd(), options);
       break;
     case 'status':
       status(process.cwd());
