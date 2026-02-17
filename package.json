@@ -4,12 +4,27 @@
   "description": "Autonomous Claude Code pipeline engine. Install into any repo, write a BRIEF.md, and let Claude build your project phase by phase.",
   "type": "module",
   "bin": {
-    "cc-pipeline": "./bin/cc-pipeline.js"
+    "cc-pipeline": "bin/cc-pipeline.js"
   },
   "scripts": {
     "test": "node --test src/**/*.test.js"
   },
-  "keywords": ["claude", "claude-code", "pipeline", "ai", "autonomous", "code-generation"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/timjohnson/cc-pipeline.git"
+  },
+  "bugs": {
+    "url": "https://github.com/timjohnson/cc-pipeline/issues"
+  },
+  "homepage": "https://github.com/timjohnson/cc-pipeline#readme",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "pipeline",
+    "ai",
+    "autonomous",
+    "code-generation"
+  ],
   "author": "Tim Johnson",
   "license": "MIT",
   "engines": {

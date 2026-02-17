@@ -1,0 +1,15 @@
+# Test files - these patterns work with npm's file inclusion
+**/*.test.js
+
+# Project-specific files (use leading slash to match only at root)
+/BRIEF.md
+/CLAUDE.md
+/DECISIONS.md
+/PLAN.md
+/REFLECTIONS.md
+/.pipeline/
+
+# Development files
+.git
+.gitignore
+node_modules/
