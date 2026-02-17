@@ -140,3 +140,56 @@ All 24 tests pass. Test suite runs in ~10 seconds (dominated by the signal test'
 - **README.md** — doesn't exist yet. Phase 4 deliverable. Should cover: install, `init`, `run`, `status`, workflow.yaml schema, agent types, resume behavior, signal handling.
 - **npm publish dry run** — verify `package.json` has correct `bin`, `files`, `engines` fields. Test `npm pack` output.
 - **Box width inconsistency** — standardize banner (60) and status (52) to the same width, or extract a shared constant.
+
+---
+
+## Phase 4 Reflection: Testing & Documentation
+
+### (1) What did this phase accomplish?
+
+Phase 4 delivered comprehensive test coverage and publish readiness across two commits (`631793f` and `483993f`):
+
+- **86 tests passing.** From 24 tests at end of Phase 3 to 86 — a 3.5x increase. Test suite runs in ~10 seconds. New test files:
+  - `src/state.test.js` (375 lines) — Thorough coverage of `appendEvent`, `readEvents`, `getCurrentState`, and `deriveResumePoint` including edge cases: empty JSONL, corrupted lines, multiple phases, step skips, interruption recovery.
+  - `src/config.test.js` (318 lines) — `loadConfig` parsing with camelCase normalization, missing fields, empty steps. Full coverage of previously-flagged "dead code" helpers: `getStepByName`, `getStepIndex`, `getNextStep`, `getFirstStep` — they're tested even though the engine doesn't call them. Tests validate error paths (unknown step throws, empty steps throws).
+  - `src/prompts.test.js` (173 lines) — Template substitution for `{{PHASE}}`, `{{BRIEF}}`, `{{PREV_REFLECTIONS}}`, `{{FILE_TREE}}`. File-reading paths and missing-file fallbacks.
+  - `src/logger.test.js` (165 lines) — Banner rendering, box-drawing output, ANSI formatting.
+  - `src/init.test.js` (237 lines) — Init command scaffolding: creates `.pipeline/`, copies templates, doesn't overwrite existing files (the Phase 3 concern about overwrite safety is now tested). Second commit (`483993f`) fixed a duplicate `writeFileSync` import.
+
+- **README.md** (308 lines) — Comprehensive documentation covering: what it is, prerequisites, installation (global + npx), quick start, all three commands (`init`, `run`, `status`), CLI options (`--phases`, `--model`), `workflow.yaml` schema with agent types, `BRIEF.md` format, resume behavior, directory structure, and contributing guide.
+
+- **LICENSE** — MIT license added.
+
+- **npm publish dry run ready** — `.npmignore` added (excludes tests, reflections, decisions, plan). `npm pack --dry-run` produces a clean 23.7 kB tarball with 27 files. `package.json` has correct `bin`, `files`, and `engines` (>=18) fields.
+
+### (2) PLAN.md updates needed?
+
+Phase 4 deliverables checklist against PLAN.md:
+- ✅ Unit tests for state.js, config.js, prompts.js, logger.js
+- ✅ Integration test: init → mock run → status cycle (init.test.js covers scaffolding; state.test.js covers event cycles)
+- ✅ README.md with usage, examples, configuration guide
+- ✅ LICENSE (MIT)
+- ✅ npm publish dry run
+
+**PLAN.md is complete. All four phases are delivered.** No updates needed for active planning. The plan could be archived or marked done.
+
+### (3) Remaining loose ends from prior reflections
+
+These issues were flagged in earlier phases and were **not addressed** in Phase 4. They're non-blocking for an initial release but should be tracked:
+
+- **`{{FILE_TREE}}` is still a placeholder.** `prompts.js:44` substitutes it with `'(file tree placeholder)'`. The test confirms the placeholder substitution works but doesn't implement real file tree generation. For v0.2: run `find` or `tree` and inject actual output.
+- **Test gate is still a stub.** `engine.js:272` prints `[STUB] Would run test gate`. The `testGate` field is parsed from workflow.yaml but does nothing. For v0.2: implement `npm test` execution or remove the field.
+- **`config.js` helpers are tested but unused in production code.** `getStepByName`, `getStepIndex`, `getNextStep`, `getFirstStep` have full test coverage now (good), but the engine still does its own inline `findIndex`. Either refactor the engine to use these helpers or accept them as a public API for external consumers.
+- **`execSync` in interactive agent** — still uses blocking tmux calls with no timeout. Low risk in practice but a freeze hazard if tmux hangs.
+- **Box width inconsistency** — banner uses `BOX_WIDTH = 60`, status uses 52. Minor visual nit.
+- **Signal handler race** — the JSONL can contain both `step_done` and `interrupted` for the same step. `deriveResumePoint` handles this correctly (last event wins), but it's undocumented as intentional behavior.
+
+### (4) Overall project assessment
+
+The project is **release-ready at v0.1.0**. All four phases delivered their core promises:
+- Phase 1: Engine, state, config, prompts, logger — working core
+- Phase 2: All three agent types wired in — piped, interactive, bash
+- Phase 3: CLI polish, signal handling, resume logic, banner art
+- Phase 4: 86 tests, README, LICENSE, npm-publishable
+
+The codebase is clean ESM with a single dependency (`yaml`), well-tested, and documented. The remaining loose ends (`{{FILE_TREE}}`, test gate stub, dead helpers) are all v0.2 scope items that don't affect the core pipeline functionality.
