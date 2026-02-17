@@ -124,11 +124,12 @@ export async function runEngine(projectDir, options = {}) {
 
       for (let i = stepIndex; i < config.steps.length; i++) {
         if (interrupted) {
-          appendEvent(logFile, { event: 'interrupted', phase, step: currentStepName });
+          // Signal handler already wrote the interrupted event
           throw new Error('Pipeline interrupted by signal');
         }
 
         const stepDef = config.steps[i];
+        currentStepName = stepDef.name;
         await runStep(phase, stepDef, projectDir, config, logFile, options);
       }
 
@@ -154,7 +155,7 @@ export async function runEngine(projectDir, options = {}) {
       });
       cancelSleep = null;
       if (interrupted) {
-        appendEvent(logFile, { event: 'interrupted', phase, step: currentStepName });
+        // Signal handler already wrote the interrupted event
         throw new Error('Pipeline interrupted by signal');
       }
     }

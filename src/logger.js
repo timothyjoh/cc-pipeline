@@ -18,11 +18,12 @@ export function printBanner(config, projectDir, currentState) {
   const projectName = projectDir.split('/').pop();
   const BOX_WIDTH = 60;
 
-  // Helper to pad line with spaces and add right border
-  const boxLine = (text, color = '') => {
+  // Helper to pad line with spaces and add right border.
+  // All ANSI codes must be included in `text`; this function only handles padding.
+  const boxLine = (text) => {
     const stripped = text.replace(/\x1b\[[0-9;]*m/g, ''); // Remove ANSI codes for length calc
     const padding = ' '.repeat(Math.max(0, BOX_WIDTH - 2 - stripped.length));
-    return `║ ${color}${text}${COLORS.reset}${padding} ║`;
+    return `║ ${text}${padding}${COLORS.reset} ║`;
   };
 
   const lines = [
@@ -33,20 +34,21 @@ export function printBanner(config, projectDir, currentState) {
   ];
 
   // Show steps with current step highlighted
-  lines.push(boxLine('Pipeline Steps:', COLORS.yellow));
+  lines.push(boxLine(`${COLORS.yellow}Pipeline Steps:${COLORS.reset}`));
   config.steps.forEach((step, idx) => {
     const isCurrent = currentState && step.name === currentState.step;
-    const marker = isCurrent ? `${COLORS.cyan}▶${COLORS.reset}` : ' ';
-    const stepText = `${marker} ${idx + 1}. ${step.name}`;
-    const stepColor = isCurrent ? COLORS.cyan : '';
-    lines.push(boxLine(stepText, stepColor));
+    const marker = isCurrent ? `${COLORS.cyan}▶` : ' ';
+    const stepText = isCurrent
+      ? `${COLORS.cyan}${marker} ${idx + 1}. ${step.name}${COLORS.reset}`
+      : `${marker} ${idx + 1}. ${step.name}`;
+    lines.push(boxLine(stepText));
   });
 
   // Show phase and status
   if (currentState && currentState.phase) {
     lines.push(boxLine(''));
-    const phaseText = `Phase: ${currentState.phase} | Status: ${currentState.status}`;
-    lines.push(boxLine(phaseText, COLORS.dim));
+    const phaseText = `${COLORS.dim}Phase: ${currentState.phase} | Status: ${currentState.status}${COLORS.reset}`;
+    lines.push(boxLine(phaseText));
   }
 
   lines.push('╚' + '═'.repeat(BOX_WIDTH) + '╝');
