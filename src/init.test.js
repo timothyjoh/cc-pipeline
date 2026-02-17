@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { mkdtempSync, rmSync, existsSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { init } from './commands/init.js';
@@ -235,6 +235,3 @@ test('init: creates expected directory structure', () => {
 
   rmSync(tempDir, { recursive: true });
 });
-
-// Import writeFileSync for the test
-import { writeFileSync } from 'node:fs';
