@@ -87,3 +87,56 @@ State module: `step_complete` removed from the relevant events filter in `getCur
 - **`step_error` events.** The engine logs `status: 'error'` inside `step_done` events, but there's no dedicated `step_error` event type and no retry logic. If Phase 3 is adding robust resume, the engine needs to distinguish "step failed, retry" from "step failed, skip" from "step failed, halt." Design this before implementing resume.
 - **The `status` command** needs to handle the cleaned-up event schema. Phase 1's `step_complete` was removed — make sure `commands/status.js` doesn't reference it.
 - **Graceful Ctrl-C during `claude -p`** — the piped agent registers the child with AgentState and the engine sends SIGTERM → SIGKILL. But the piped agent's Promise resolves on `close`, so the engine may try to log `step_done` after the signal handler has already called `process.exit(130)`. There's a potential race between the agent's cleanup and the signal handler's forced exit. Test with a long-running `claude -p` call and Ctrl-C.
+
+---
+
+## Phase 3 Reflection: CLI Polish & Init Command
+
+### (1) What did this phase accomplish?
+
+Phase 3 addressed CLI polish, banner rendering, signal handling correctness, and test coverage. Two commits (`ae77b55` and `abf990c`):
+
+- **Banner box art fixed** — `src/logger.js` rewritten with proper `BOX_WIDTH = 60`, a `boxLine()` helper that strips ANSI codes for length calculation and right-pads content to align the `║` border. This fixes the Phase 1 padding bug where long workflow names broke the box. The second commit (`abf990c`) fixed ANSI double-application where color codes were nested redundantly in step markers.
+
+- **`status` command improved** — `src/commands/status.js` now uses padded box-drawing output matching the banner style. Phase/step/status fields are padded to 42 chars for alignment. No references to the removed `step_complete` event (Phase 2 concern addressed).
+
+- **Signal handler bug fixes** (`abf990c`) — Fixed duplicate `interrupted` events: the signal handler was writing an interrupted event AND the engine loop was also catching the interruption and potentially writing another. Fixed stale step name in the signal handler — `currentStepName` is now updated in the engine loop *before* `runStep` so the signal handler always references the correct step.
+
+- **Resume tests** — `src/resume.test.js` (247 lines, 12 tests) exercises `deriveResumePoint` and `getCurrentState` across all scenarios: empty JSONL, mid-step interruption, step completion, phase completion, multi-phase, partial phases, step skips, last-step-done edge case. Thorough and well-structured.
+
+- **Signal integration tests** — `src/signal.test.js` (170 lines, 2 tests) spawns the actual CLI in a temp directory, sends SIGINT, and verifies: (a) the process exits rather than hanging, (b) exit happens within 4 seconds, (c) JSONL contains an `interrupted` event when the process was alive at signal time. Gracefully handles the case where `claude` CLI isn't installed (steps error early, but signal handling still works).
+
+- **Smoke tests expanded** — `src/smoke.test.js` grew from 5 to 7 tests, adding a `deriveResumePoint` integration test with real JSONL append/read cycles.
+
+All 24 tests pass. Test suite runs in ~10 seconds (dominated by the signal test's 1-second startup delay).
+
+### (2) PLAN.md updates needed?
+
+- **Phase 3 is mostly complete.** The deliverables checklist:
+  - ✅ `cc-pipeline run` works end-to-end with all agents
+  - ✅ Graceful Ctrl-C at any point
+  - ✅ Resume from interruption
+  - ✅ Banner display on start
+  - ⚠️ `cc-pipeline init` — was already implemented in the initial scaffold commit. Not touched in Phase 3. Works but wasn't re-verified or tested.
+  - ⚠️ `cc-pipeline status` — improved but no dedicated test for it.
+- **Phase 3 verification criterion** ("Full init → run → Ctrl-C → resume cycle works") — the signal test covers run → Ctrl-C → exit. Resume is tested via unit tests against `deriveResumePoint`. The full end-to-end cycle (init → run → Ctrl-C → resume → run continues from correct step) is not tested as an integration test. This is hard to automate without `claude` CLI but could be a manual verification checklist item.
+- **`{{FILE_TREE}}` placeholder** — still unresolved, noted in Phase 1 and Phase 2. Should be added to Phase 4 scope or cut.
+- **Test gate** — still a stub (engine.js:272). Should be Phase 4 scope or cut.
+- **`--dry-run` flag** — Phase 2 reflection suggested this for testing without `claude` CLI. Not implemented. Would make the signal integration test more reliable. Consider for Phase 4.
+
+### (3) Architecture concerns
+
+- **Signal handler race condition partially addressed.** The duplicate-event fix is good, but the underlying race between the signal handler's `process.exit(130)` at 3 seconds and an agent's Promise resolving on `close` remains. If a `claude -p` process takes 2.5s to die after SIGTERM, the agent's `.on('close')` fires, `runStep` tries to `appendEvent` for `step_done`, and then 0.5s later the signal handler calls `process.exit`. This works by accident (JSONL append is synchronous), but it means the JSONL could have both `step_done` and `interrupted` for the same step. `deriveResumePoint` should handle this gracefully — it does, because it looks at the *last* relevant event, and `interrupted` comes after `step_done`. But worth documenting as intentional.
+- **`config.js` helper dead code** — still unused (flagged in Phase 1). `getStepByName`, `getStepIndex`, `getNextStep`, `getFirstStep` are exported but never called. Engine does its own `findIndex`. Either wire them in or remove them in Phase 4.
+- **No test for `init` command.** The init command was implemented in the initial scaffold but has zero test coverage. It copies templates and creates directories — easy to test, should be in Phase 4.
+- **`status` command hardcodes box width at 52 chars** while the banner uses 60. Minor visual inconsistency.
+
+### (4) What should Phase 4 watch out for?
+
+- **Test coverage gaps to fill:** `init` command, `status` command, `config.js` (parsing + helpers), `prompts.js` (template substitution), error paths in `state.js`. The current 24 tests cover state/resume logic and signal handling well, but the other modules have only import-smoke tests.
+- **`{{FILE_TREE}}` decision:** implement it (run `find` or `tree` and inject) or remove the placeholder from `prompts.js`. Don't ship a template variable that silently produces nothing.
+- **Test gate decision:** implement real `npm test` execution or remove the stub + `testGate` field from workflow.yaml.  Leaving a visible `[STUB]` in production output looks unfinished.
+- **Dead code cleanup:** `config.js` helpers, any remaining `step_complete` references. Run a grep for unused exports before declaring Phase 4 complete.
+- **README.md** — doesn't exist yet. Phase 4 deliverable. Should cover: install, `init`, `run`, `status`, workflow.yaml schema, agent types, resume behavior, signal handling.
+- **npm publish dry run** — verify `package.json` has correct `bin`, `files`, `engines` fields. Test `npm pack` output.
+- **Box width inconsistency** — standardize banner (60) and status (52) to the same width, or extract a shared constant.
