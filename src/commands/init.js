@@ -12,10 +12,9 @@ export function init(projectDir, options = {}) {
 
   console.log('🔧 Initializing cc-pipeline...\n');
 
-  // Create/update .pipeline/
+  // Create .pipeline/
   if (existsSync(pipelineDir)) {
-    cpSync(join(TEMPLATES_DIR, 'pipeline'), pipelineDir, { recursive: true, force: true });
-    console.log('  ✅ Updated .pipeline/ (existing files overwritten with latest templates)');
+    console.log('  ⚠️  .pipeline/ already exists — run `cc-pipeline update` to refresh prompts');
   } else {
     cpSync(join(TEMPLATES_DIR, 'pipeline'), pipelineDir, { recursive: true });
     console.log('  ✅ Created .pipeline/');
