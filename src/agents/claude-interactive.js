@@ -177,8 +177,27 @@ export class ClaudeInteractiveAgent extends BaseAgent {
     const safeSession = shellEscape(sessionName);
     execSync(`tmux load-buffer "${safePromptFile}"`);
     execSync(`tmux paste-buffer -t "${safeSession}"`);
-    await this.sleep(1000);
+    await this.sleep(2000);
     execSync(`tmux send-keys -t "${safeSession}" Enter`);
+    await this.sleep(2000);
+
+    // Verify prompt was submitted — check if Claude is processing
+    // If the input area still has content, send Enter again
+    try {
+      const paneContent = execSync(
+        `tmux capture-pane -t "${safeSession}" -p -S -5 2>/dev/null`,
+        { encoding: 'utf-8' }
+      );
+      // If we see the input prompt marker or ">" but no processing indicator,
+      // the Enter may not have registered — send it again
+      if (!/(Thinking|Working|✻|⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏)/.test(paneContent)) {
+        console.log('  Prompt may not have submitted — sending Enter again...');
+        execSync(`tmux send-keys -t "${safeSession}" Enter`);
+        await this.sleep(2000);
+      }
+    } catch (e) {
+      // Ignore — if we can't check, just continue and hope for the best
+    }
   }
 
   /**
