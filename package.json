@@ -3,7 +3,7 @@
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
-  "version": "0.2.9",
+  "version": "0.3.0",
   "description": "Autonomous Claude Code pipeline engine. Install into any repo, write a BRIEF.md, and let Claude build your project phase by phase.",
   "type": "module",
   "bin": {

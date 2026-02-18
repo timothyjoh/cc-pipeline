@@ -120,7 +120,8 @@ export class ClaudeInteractiveAgent extends BaseAgent {
 
     // Clear CLAUDECODE env var to prevent "nested session" detection
     // This gets set if the user previously ran Claude Code in this shell
-    execSync(`tmux send-keys -t "${safeSession}" "unset CLAUDECODE" Enter`);
+    // Also enable experimental agent teams feature
+    execSync(`tmux send-keys -t "${safeSession}" "unset CLAUDECODE && export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1" Enter`);
     await this.sleep(500);
 
     console.log(`  Starting ${agent} session in tmux...`);
