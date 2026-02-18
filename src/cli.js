@@ -1,6 +1,7 @@
 import { init } from './commands/init.js';
 import { runPipeline } from './commands/run.js';
 import { status } from './commands/status.js';
+import { reset } from './commands/reset.js';
 
 const HELP = `
 cc-pipeline — Autonomous Claude Code pipeline engine
@@ -9,6 +10,7 @@ Usage:
   cc-pipeline init              Scaffold .pipeline/ and BRIEF.md.example
   cc-pipeline run [options]     Run the pipeline
   cc-pipeline status            Show current pipeline state
+  cc-pipeline reset             Clear event log, phase outputs, and STATUS.md
 
 Run options:
   --phases <n>    Number of phases to run (default: unlimited)
@@ -18,6 +20,7 @@ Examples:
   npx cc-pipeline init
   npx cc-pipeline run --phases 3
   npx cc-pipeline status
+  npx cc-pipeline reset
 `.trim();
 
 export async function run(args) {
@@ -39,6 +42,9 @@ export async function run(args) {
       break;
     case 'status':
       status(process.cwd());
+      break;
+    case 'reset':
+      reset(process.cwd());
       break;
     default:
       console.error(`Unknown command: ${command}`);
