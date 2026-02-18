@@ -130,7 +130,50 @@ export async function runEngine(projectDir, options = {}) {
 
         const stepDef = config.steps[i];
         currentStepName = stepDef.name;
-        await runStep(phase, stepDef, projectDir, config, logFile, options);
+
+        // Retry logic: 3 attempts with backoff (0s, 30s, 60s)
+        const retryDelays = [0, 30000, 60000];
+        let lastResult = null;
+
+        for (let attempt = 0; attempt < retryDelays.length; attempt++) {
+          if (attempt > 0) {
+            const delaySec = retryDelays[attempt] / 1000;
+            console.log(`\n  ⏳ Retry ${attempt}/2 for step "${stepDef.name}" in ${delaySec}s...`);
+            await new Promise(resolve => {
+              const timer = setTimeout(resolve, retryDelays[attempt]);
+              cancelSleep = () => { clearTimeout(timer); resolve(); };
+            });
+            cancelSleep = null;
+            if (interrupted) throw new Error('Pipeline interrupted by signal');
+          }
+
+          lastResult = await runStep(phase, stepDef, projectDir, config, logFile, options);
+
+          if (lastResult === 'ok' || lastResult === 'skipped') break;
+
+          // Log retry
+          if (attempt < retryDelays.length - 1) {
+            appendEvent(logFile, {
+              event: 'step_retry',
+              phase,
+              step: stepDef.name,
+              attempt: attempt + 1,
+            });
+          }
+        }
+
+        // If still failed after all retries, stop the pipeline
+        if (lastResult === 'error') {
+          console.error(`\n  ❌ Step "${stepDef.name}" failed after 3 attempts. Pipeline stopped.`);
+          console.error(`  Run \`cc-pipeline run\` to retry from this step.`);
+          appendEvent(logFile, {
+            event: 'pipeline_stopped',
+            phase,
+            step: stepDef.name,
+            reason: 'max_retries_exceeded',
+          });
+          return;
+        }
       }
 
       // Phase complete
@@ -189,7 +232,7 @@ async function runStep(phase, stepDef, projectDir, config, logFile, options = {}
         reason: `${skipUnless} not found`,
       });
       console.log(`Skipping ${stepName} (${skipUnless} not found)`);
-      return;
+      return 'skipped';
     }
   }
 
@@ -273,5 +316,7 @@ async function runStep(phase, stepDef, projectDir, config, logFile, options = {}
   if (testGate === true) {
     console.log(`  [STUB] Would run test gate for ${stepName}`);
   }
+
+  return status;
 }
 
