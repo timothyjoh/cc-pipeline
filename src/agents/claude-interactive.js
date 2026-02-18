@@ -122,7 +122,7 @@ export class ClaudeInteractiveAgent extends BaseAgent {
     execSync(`tmux send-keys -t "${safeSession}" "${cmd}" Enter`);
 
     // Poll for startup - check for startup markers
-    const maxAttempts = 30;
+    const maxAttempts = 60;
     const pollInterval = 2000;
 
     for (let i = 0; i < maxAttempts; i++) {
@@ -150,6 +150,15 @@ export class ClaudeInteractiveAgent extends BaseAgent {
       await this.sleep(pollInterval);
     }
 
+    // Capture final pane content for diagnostics
+    let finalPane = '(unable to capture)';
+    try {
+      finalPane = execSync(
+        `tmux capture-pane -t "${safeSession}" -p -S -20 2>/dev/null`,
+        { encoding: 'utf-8' }
+      );
+    } catch (e) { /* ignore */ }
+    console.error(`\n  ⚠️  Tmux pane content at timeout:\n${finalPane}`);
     throw new Error(`${agent} failed to start after 60s`);
   }
 

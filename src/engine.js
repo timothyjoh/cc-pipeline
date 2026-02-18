@@ -233,7 +233,7 @@ async function runStep(phase, stepDef, projectDir, config, logFile, options = {}
     }
   } catch (err) {
     console.error(`Error executing agent ${agent}: ${err.message}`);
-    result = { exitCode: 1, outputPath: null };
+    result = { exitCode: 1, outputPath: null, error: err.message };
   }
 
   // Log step done
@@ -245,6 +245,7 @@ async function runStep(phase, stepDef, projectDir, config, logFile, options = {}
     agent,
     status,
     exitCode: result.exitCode,
+    ...(result.error && { error: result.error }),
   });
 
   // Validate output if specified
