@@ -66,6 +66,11 @@ steps:
     prompt: prompts/reflect.md
     output: "REFLECTIONS.md"
 
+  - name: status
+    description: "Update STATUS.md with phase summary"
+    agent: claude-piped
+    prompt: prompts/status.md
+
   - name: commit
     description: "Git commit + push"
     agent: bash

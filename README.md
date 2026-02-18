@@ -145,7 +145,8 @@ Each phase runs through a series of **steps** defined in `workflow.yaml`:
 5. **review** — Claude performs staff engineer-level code review
 6. **fix** — Claude (interactive) addresses review findings
 7. **reflect** — Claude looks back at progress and forward to the next phase
-8. **commit** — Bash agent commits and pushes changes
+8. **status** — Updates `STATUS.md` at the project root with a running summary of what's been built, how to run it, review findings, test coverage, and what's next
+9. **commit** — Bash agent commits and pushes changes
 
 ### Agents
 

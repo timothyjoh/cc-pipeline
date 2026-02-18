@@ -55,7 +55,8 @@ Each phase runs through these steps in order:
 5. **review** — Staff engineer-level code review
 6. **fix** — Address review findings (if any)
 7. **reflect** — Look back and plan the next phase
-8. **commit** — Git commit and push
+8. **status** — Update STATUS.md with what was built, how to run it, review findings, test coverage, and what's next
+9. **commit** — Git commit and push
 
 Phase outputs are saved to `docs/phases/phase-N/`.
 
