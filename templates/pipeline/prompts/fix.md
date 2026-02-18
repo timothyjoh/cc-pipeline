@@ -14,10 +14,23 @@ Current phase: {{PHASE}}
 ## Your Job
 
 1. Read MUST-FIX.md completely
-2. Fix every task listed, in order
-3. Run the verify step for each fix
-4. Run the full test suite after all fixes
-5. Confirm all tests pass
+2. If there are 3+ independent fixes, create an agent team to parallelize them
+3. Fix every task listed
+4. Run the verify step for each fix
+5. Run the full test suite after all fixes
+6. Confirm all tests pass
+
+## Agent Teams — Use When Appropriate
+
+Agent teams are enabled in this session (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). If MUST-FIX.md has multiple independent fixes (3+), you should create an agent team:
+
+- **You (Team Lead):** Coordinate and run the final test suite
+- **Fix Teammates:** Each takes one or more independent fix tasks
+- Brief each teammate with the specific fix instructions and relevant file context
+- Set dependencies if fixes must happen in order
+- After all teammates finish, run the full test suite yourself and handle regressions
+
+For 1-2 simple fixes, just do them yourself — no need for a team.
 
 ## Rules
 
