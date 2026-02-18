@@ -1,5 +1,8 @@
 {
-  "name": "cc-pipeline",
+  "name": "@timothyjoh/cc-pipeline",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "version": "0.1.0",
   "description": "Autonomous Claude Code pipeline engine. Install into any repo, write a BRIEF.md, and let Claude build your project phase by phase.",
   "type": "module",
@@ -11,12 +14,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/timjohnson/cc-pipeline.git"
+    "url": "git+https://github.com/timothyjoh/cc-pipeline.git"
   },
   "bugs": {
-    "url": "https://github.com/timjohnson/cc-pipeline/issues"
+    "url": "https://github.com/timothyjoh/cc-pipeline/issues"
   },
-  "homepage": "https://github.com/timjohnson/cc-pipeline#readme",
+  "homepage": "https://github.com/timothyjoh/cc-pipeline#readme",
   "keywords": [
     "claude",
     "claude-code",
