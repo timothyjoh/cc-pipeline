@@ -69,9 +69,7 @@ one-at-a-time to build a good brief.
 
 ### 3. Run the pipeline
 
-**With Claude Code (recommended):** The `init` command creates a `CLAUDE.md` with full pipeline instructions. Just open Claude Code in your project and tell it to run the pipeline — it already knows what to do.
-
-**Manually:**
+> **⚠️ Run from a regular terminal, not from inside Claude Code.** The pipeline spawns its own Claude Code sessions (in tmux), so running it from within Claude Code would try to nest Claude inside Claude — which isn't supported.
 
 ```bash
 # Run the full pipeline

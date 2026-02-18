@@ -23,9 +23,10 @@ can construct a good initial project brief.
 
 ## Running the Pipeline
 
-Execute the pipeline and monitor it:
+> **⚠️ Do NOT run the pipeline from within Claude Code.** The pipeline spawns its own Claude Code sessions in tmux — nesting Claude inside Claude is not supported. Run it from a regular terminal instead.
 
 ```bash
+# From a regular terminal (not Claude Code):
 npx @timothyjoh/cc-pipeline@latest run
 ```
 
