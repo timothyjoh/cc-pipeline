@@ -53,6 +53,7 @@ export async function runEngine(projectDir, options = {}) {
   let currentStepName = resumePoint.stepName;
 
   const handleSignal = (signal) => {
+    if (interrupted) return; // Already handling a signal, ignore duplicates
     console.log(`\nReceived ${signal}, shutting down gracefully...`);
     interrupted = true;
     agentState.setInterrupted(true);
@@ -149,6 +150,9 @@ export async function runEngine(projectDir, options = {}) {
 
           lastResult = await runStep(phase, stepDef, projectDir, config, logFile, options);
 
+          // If interrupted during step execution, bail immediately
+          if (interrupted) throw new Error('Pipeline interrupted by signal');
+
           if (lastResult === 'ok' || lastResult === 'skipped') break;
 
           // Log retry
@@ -172,7 +176,7 @@ export async function runEngine(projectDir, options = {}) {
             step: stepDef.name,
             reason: 'max_retries_exceeded',
           });
-          return;
+          process.exit(1);
         }
       }
 
