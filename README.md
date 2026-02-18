@@ -38,7 +38,7 @@ cd your-project
 npx @timothyjoh/cc-pipeline@latest init
 ```
 
-This scaffolds the `.pipeline/` directory, prompt templates, and a `BRIEF.md.example` into your project.
+This scaffolds the `.pipeline/` directory, prompt templates, `CLAUDE.md`, and a `BRIEF.md.example` into your project.
 
 ## Quick Start
 
@@ -69,64 +69,49 @@ one-at-a-time to build a good brief.
 
 ### 3. Run the pipeline
 
-> **⚠️ Run from a regular terminal, not from inside Claude Code.** The pipeline spawns its own Claude Code sessions (in tmux), so running it from within Claude Code would try to nest Claude inside Claude — which isn't supported.
+> **⚠️ Run from a regular terminal, not from inside Claude Code.** The pipeline spawns its own Claude Code sessions in tmux, so running it from within Claude Code would nest sessions — which isn't supported.
 
 ```bash
-# Run the full pipeline
-npx @timothyjoh/cc-pipeline@latest run
-
-# Limit to N phases
-npx @timothyjoh/cc-pipeline@latest run --phases 3
-
-# Override model for all steps
-npx @timothyjoh/cc-pipeline@latest run --model opus
-
-# Check progress
-npx @timothyjoh/cc-pipeline@latest status
+npx cc-pipeline run
 ```
 
-The pipeline resumes from interruptions automatically. Press **Ctrl-C** to pause, then run again to pick up where you left off.
+That's it. The pipeline will spec, build, review, fix, and commit each phase automatically.
+
+### 4. Monitor progress
+
+```bash
+npx cc-pipeline status
+```
+
+The pipeline also generates a `STATUS.md` at the project root after each phase — a running summary of what's been built, review findings, test coverage, and what's next.
 
 ## Commands
 
-### `cc-pipeline init`
+| Command | Description |
+|---------|-------------|
+| `npx @timothyjoh/cc-pipeline@latest init` | Scaffold `.pipeline/`, `CLAUDE.md`, and `BRIEF.md.example` |
+| `npx @timothyjoh/cc-pipeline@latest update` | Refresh prompts and docs (preserves your `workflow.yaml`) |
+| `npx cc-pipeline run [--phases N] [--model NAME]` | Run the pipeline |
+| `npx cc-pipeline status` | Show current phase, step, and recent events |
+| `npx cc-pipeline reset` | Clear event log, phase outputs, and STATUS.md |
 
-Scaffolds `.pipeline/` directory and `BRIEF.md.example` into your project:
+> **Tip:** Use `@latest` with `init` and `update` to get the newest templates. For `run`, `status`, and `reset`, the cached version is fine.
 
-```
-your-project/
-├── .pipeline/
-│   ├── workflow.yaml    # Pipeline configuration
-│   └── prompts/         # Agent prompts (spec, plan, build, review, etc.)
-└── BRIEF.md.example     # Template for your project vision
-```
-
-### `cc-pipeline run [options]`
-
-Executes the pipeline, running phases until completion.
-
-**Options:**
+### Run Options
 
 - `--phases <n>` — Limit to N phases (useful for testing)
-- `--model <name>` — Override model for this run (e.g., `opus`, `sonnet`, `haiku`)
+- `--model <name>` — Override model for all steps (e.g., `opus`, `sonnet`, `haiku`)
 
-**Examples:**
-
-```bash
-cc-pipeline run                  # Run until complete
-cc-pipeline run --phases 3       # Run just 3 phases
-cc-pipeline run --model opus     # Use opus for all steps
-```
-
-The pipeline automatically resumes from interruptions. Press Ctrl-C to pause; run `cc-pipeline run` again to continue.
-
-### `cc-pipeline status`
-
-Shows current pipeline state: phase number, current step, and recent events.
+### Examples
 
 ```bash
-cc-pipeline status
+npx cc-pipeline run                  # Run until complete
+npx cc-pipeline run --phases 3       # Run just 3 phases
+npx cc-pipeline run --model opus     # Use opus for all steps
+npx cc-pipeline reset                # Start over from scratch
 ```
+
+The pipeline resumes from interruptions automatically. Press **Ctrl-C** to pause, then `npx cc-pipeline run` again to continue.
 
 ## How It Works
 
@@ -136,102 +121,58 @@ The pipeline works in **phases**, each representing a unit of progress (e.g., "u
 
 ### Steps
 
-Each phase runs through a series of **steps** defined in `workflow.yaml`:
+Each phase runs through these steps (defined in `.pipeline/workflow.yaml`):
 
-1. **spec** — Claude reads BRIEF.md and breaks out a spec for this phase
-2. **research** — Claude analyzes the current codebase state
-3. **plan** — Claude creates an actionable implementation plan
-4. **build** — Claude (interactive) implements the plan with autonomous agent teams
-5. **review** — Claude performs staff engineer-level code review
-6. **fix** — Claude (interactive) addresses review findings
-7. **reflect** — Claude looks back at progress and forward to the next phase
-8. **status** — Updates `STATUS.md` at the project root with a running summary of what's been built, how to run it, review findings, test coverage, and what's next
-9. **commit** — Bash agent commits and pushes changes
+1. **spec** — Break the project vision into a phase spec
+2. **research** — Analyze the current codebase state
+3. **plan** — Create an actionable implementation plan
+4. **build** — Implement the plan (interactive Claude in tmux)
+5. **review** — Staff engineer-level code review
+6. **fix** — Address review findings (skipped if none)
+7. **reflect** — Look back at progress, plan the next phase
+8. **status** — Update `STATUS.md` with build summary, test coverage, and what's next
+9. **commit** — Git commit and push
 
 ### Agents
 
-Each step runs via an **agent** that determines how Claude executes:
-
-- **`claude-piped`** — Non-interactive, document generation (spec, research, plan, review, reflect)
-  - Runs: `claude -p "<prompt>"`
-  - Best for: Planning, analysis, documentation
-
-- **`claude-interactive`** — Interactive Claude in tmux session (build, fix)
-  - Launches Claude with full tool access
-  - Best for: Coding, debugging, multi-step implementation
-
-- **`bash`** — Direct shell command execution (commit)
-  - Runs: Git commands, scripts, etc.
-  - Best for: Mechanical tasks
-
-### Models
-
-You can specify models per step in `workflow.yaml` or override globally via `--model`:
-
-```yaml
-steps:
-  - name: spec
-    agent: claude-piped
-    model: sonnet          # Use sonnet for this step
-    prompt: prompts/spec.md
-```
-
-Valid models: `opus`, `sonnet`, `haiku`
+| Agent | How It Runs | Used For |
+|-------|------------|----------|
+| `claude-piped` | `claude -p "<prompt>"` (non-interactive) | Planning, analysis, reviews, docs |
+| `claude-interactive` | Claude in a tmux session with full tool access | Building code, fixing issues |
+| `bash` | Direct shell command | Git commits, scripts |
 
 ### State & Resume
 
-Pipeline state is tracked in `.pipeline/pipeline.jsonl`—an append-only event log. The current phase and step are derived from the log, so you can:
-
-- Press **Ctrl-C** to interrupt safely
-- Run **`cc-pipeline run`** again to resume exactly where you left off
-
-No manual state management required.
+Pipeline state lives in `.pipeline/pipeline.jsonl` — an append-only event log. The current phase and step are derived from the log, so you can interrupt and resume seamlessly.
 
 ### Project Completion
 
-When Claude detects the project is complete, it writes `PROJECT COMPLETE` in the first line of `REFLECTIONS.md`. The pipeline stops automatically.
+When Claude determines the project is complete, it writes `PROJECT COMPLETE` in `REFLECTIONS.md`. The pipeline stops automatically.
 
 ## Configuration
 
-The pipeline behavior is controlled by `.pipeline/workflow.yaml`. Key fields:
+Pipeline behavior is controlled by `.pipeline/workflow.yaml`. See `.pipeline/CLAUDE.md` for full configuration docs — how to edit steps, change agents/models, customize prompts, and add new steps.
 
+### Quick Examples
+
+**Override model per step:**
 ```yaml
-name: "Default Pipeline"
-version: 1
-
-# Where phase outputs are stored
-phases_dir: "docs/phases"
-
-# Steps executed in each phase
 steps:
   - name: spec
-    description: "Break project vision into phase spec"
     agent: claude-piped
-    model: sonnet              # Optional model override
-    prompt: prompts/spec.md    # Prompt template
-    output: "SPEC.md"          # Expected output file
-
-  - name: build
-    description: "Implement the plan"
-    agent: claude-interactive
-    prompt: prompts/build.md
-    test_gate: true            # Placeholder for future test gating
-
-  - name: fix
-    description: "Address review findings"
-    agent: claude-interactive
-    prompt: prompts/fix.md
-    skip_unless: "MUST-FIX.md" # Skip if condition not met
+    model: sonnet
+    prompt: prompts/spec.md
 ```
 
-### Customizing Steps
+**Add conditional execution:**
+```yaml
+  - name: fix
+    agent: claude-interactive
+    prompt: prompts/fix.md
+    skip_unless: "MUST-FIX.md"    # Only runs if review produced MUST-FIX.md
+```
 
-You can modify `workflow.yaml` to:
-- Add or remove steps
-- Change agent types
-- Adjust models per step
-- Add conditional execution (`skip_unless`)
-- Customize prompts
+**Customize prompts:** Edit the markdown files in `.pipeline/prompts/` to change how each step behaves.
 
 ## Example BRIEF.md
 
@@ -264,24 +205,26 @@ A command-line task manager with persistent storage.
 
 ## Project Structure
 
-After initialization:
+After initialization and a few phases:
 
 ```
 your-project/
 ├── .pipeline/
-│   ├── workflow.yaml
-│   ├── pipeline.jsonl          # Event log (auto-created on first run)
-│   └── prompts/
+│   ├── CLAUDE.md            # Pipeline config docs (for Claude Code)
+│   ├── workflow.yaml        # Step definitions, agents, models
+│   ├── pipeline.jsonl       # Event log (auto-created on first run)
+│   └── prompts/             # Prompt templates (customizable)
 │       ├── spec.md
 │       ├── research.md
 │       ├── plan.md
 │       ├── build.md
 │       ├── review.md
 │       ├── fix.md
-│       └── reflect.md
+│       ├── reflect.md
+│       └── status.md
 ├── docs/
 │   └── phases/
-│       ├── phase-1/
+│       ├── phase-1/         # Phase artifacts
 │       │   ├── SPEC.md
 │       │   ├── RESEARCH.md
 │       │   ├── PLAN.md
@@ -289,53 +232,52 @@ your-project/
 │       │   └── REFLECTIONS.md
 │       └── phase-2/
 │           └── ...
-├── BRIEF.md                     # Your project vision
+├── BRIEF.md                 # Your project vision
+├── CLAUDE.md                # Project conventions (for Claude Code)
+├── AGENTS.md                # Dev docs (created by Phase 1)
+├── STATUS.md                # Running build summary (auto-updated)
 └── [your code here]
 ```
 
-## Tips
-
-- **Start small:** Write a minimal BRIEF.md focused on MVP features. You can always extend later.
-- **Interrupt safely:** Ctrl-C works cleanly. The pipeline resumes from the exact step.
-- **Review phase outputs:** Check `docs/phases/phase-N/` to see specs, plans, and reviews.
-- **Customize workflow:** Edit `.pipeline/workflow.yaml` to match your preferences (different agents, models, or step order).
-- **Watch the logs:** `.pipeline/pipeline.jsonl` contains a full event trace for debugging.
-
 ## Troubleshooting
 
+**"Claude Code cannot be launched inside another Claude Code session":**
+- Run the pipeline from a regular terminal, not from within Claude Code
+- If you still see this after exiting Claude Code, run: `unset CLAUDECODE` then try again
+
+**Build step times out (60s+):**
+- Check [Anthropic's status page](https://status.anthropic.com) — API issues cause slow startups
+- The pipeline will retry on resume: just run `npx cc-pipeline run` again
+
 **Pipeline won't start:**
-- Ensure `claude` CLI is installed and working (`claude --version`)
-- Run `cc-pipeline init` if `.pipeline/` doesn't exist
+- Ensure `claude` CLI is installed: `claude --version`
+- Ensure `tmux` is installed: `tmux -V`
+- Run `npx @timothyjoh/cc-pipeline@latest init` if `.pipeline/` doesn't exist
 
-**Step fails repeatedly:**
-- Check `docs/phases/phase-N/` for error messages in output files
-- Review `.pipeline/pipeline.jsonl` for event details
-- Try `--model opus` for more capable reasoning on hard steps
+**Want to start over:**
+```bash
+npx cc-pipeline reset
+npx cc-pipeline run
+```
 
-**Want to reset:**
-- Delete `.pipeline/pipeline.jsonl` to start fresh (preserves config)
-- Or delete entire `.pipeline/` directory and run `cc-pipeline init` again
+**Want the latest prompts without losing your workflow.yaml:**
+```bash
+npx @timothyjoh/cc-pipeline@latest update
+```
 
 ## Development
 
 ```bash
-# Clone the repo
 git clone https://github.com/timothyjoh/cc-pipeline.git
 cd cc-pipeline
-
-# Install dependencies
 npm install
-
-# Run tests
 npm test
-
-# Link for local development
-npm link
+npm link    # For local development
 ```
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License — see [LICENSE](LICENSE) for details.
 
 ## Contributing
 
