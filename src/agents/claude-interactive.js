@@ -179,7 +179,7 @@ export class ClaudeInteractiveAgent extends BaseAgent {
     const safeSession = shellEscape(sessionName);
     const instruction = `Read and follow all instructions in @${promptFile}`;
     const safeInstruction = shellEscape(instruction);
-    execSync(`tmux send-keys -t "${safeSession}" "${safeInstruction}" Enter`);
+    execSync(`tmux send-keys -t "${safeSession}" "${safeInstruction}" Enter Enter Enter`);
   }
 
   /**
@@ -228,11 +228,11 @@ export class ClaudeInteractiveAgent extends BaseAgent {
     }
 
     // Send exit command
-    execSync(`tmux send-keys -t "${safeSession}" "/exit"`);
+    execSync(`tmux send-keys -t "${safeSession}" "/exit" Enter Enter`);
     await this.sleep(1000);
     execSync(`tmux send-keys -t "${safeSession}" Escape`);
     await this.sleep(500);
-    execSync(`tmux send-keys -t "${safeSession}" Enter`);
+    execSync(`tmux send-keys -t "${safeSession}" Enter Enter`);
     await this.sleep(2000);
 
     console.log('  Session stopped');
