@@ -27,13 +27,13 @@ can construct a good initial project brief.
 
 ```bash
 # From a regular terminal (not Claude Code):
-npx cc-pipeline@latest run
+npx cc-pipeline run
 ```
 
 If it errors or gets stuck, investigate the issue, fix it, then resume:
 
 ```bash
-npx cc-pipeline@latest run
+npx cc-pipeline run
 ```
 
 The pipeline resumes from where it left off — state is tracked in `.pipeline/pipeline.jsonl`.

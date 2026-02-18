@@ -72,7 +72,7 @@ Then create `.pipeline/prompts/security.md` with your prompt template.
 Set per-step in workflow.yaml, or override all steps at runtime:
 
 ```bash
-npx cc-pipeline@latest run --model opus
+npx cc-pipeline run --model opus
 ```
 
 ## Prompt Templates
