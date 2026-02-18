@@ -25,17 +25,11 @@ Think of it as a CI/CD system for AI-driven developmentâ€”but instead of deployi
 
 ## Installation
 
-This package is published to [GitHub Packages](https://github.com/timothyjoh/cc-pipeline/packages). First, configure npm to use the GitHub registry for the `@timothyjoh` scope:
-
-```bash
-echo "@timothyjoh:registry=https://npm.pkg.github.com" >> ~/.npmrc
-```
-
-Then initialize the pipeline in your project:
+Initialize the pipeline in your project:
 
 ```bash
 cd your-project
-npx @timothyjoh/cc-pipeline@latest init
+npx cc-pipeline@latest init
 ```
 
 This scaffolds the `.pipeline/` directory, prompt templates, `CLAUDE.md`, and a `BRIEF.md.example` into your project.
@@ -46,7 +40,7 @@ This scaffolds the `.pipeline/` directory, prompt templates, `CLAUDE.md`, and a 
 
 ```bash
 cd your-project
-npx @timothyjoh/cc-pipeline@latest init
+npx cc-pipeline@latest init
 ```
 
 ### 2. Write your project brief
@@ -89,8 +83,8 @@ The pipeline also generates a `STATUS.md` at the project root after each phase â
 
 | Command | Description |
 |---------|-------------|
-| `npx @timothyjoh/cc-pipeline@latest init` | Scaffold `.pipeline/`, `CLAUDE.md`, and `BRIEF.md.example` |
-| `npx @timothyjoh/cc-pipeline@latest update` | Refresh prompts and docs (preserves your `workflow.yaml`) |
+| `npx cc-pipeline@latest init` | Scaffold `.pipeline/`, `CLAUDE.md`, and `BRIEF.md.example` |
+| `npx cc-pipeline@latest update` | Refresh prompts and docs (preserves your `workflow.yaml`) |
 | `npx cc-pipeline run [--phases N] [--model NAME]` | Run the pipeline |
 | `npx cc-pipeline status` | Show current phase, step, and recent events |
 | `npx cc-pipeline reset` | Clear event log, phase outputs, and STATUS.md |
@@ -252,7 +246,7 @@ your-project/
 **Pipeline won't start:**
 - Ensure `claude` CLI is installed: `claude --version`
 - Ensure `tmux` is installed: `tmux -V`
-- Run `npx @timothyjoh/cc-pipeline@latest init` if `.pipeline/` doesn't exist
+- Run `npx cc-pipeline@latest init` if `.pipeline/` doesn't exist
 
 **Want to start over:**
 ```bash
@@ -262,7 +256,7 @@ npx cc-pipeline run
 
 **Want the latest prompts without losing your workflow.yaml:**
 ```bash
-npx @timothyjoh/cc-pipeline@latest update
+npx cc-pipeline@latest update
 ```
 
 ## Development

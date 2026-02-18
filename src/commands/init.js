@@ -47,7 +47,7 @@ Done! Next steps:
      (or open Claude Code and it'll help you write one — see CLAUDE.md)
 
   2. Run the pipeline:
-     npx @timothyjoh/cc-pipeline@latest run
+     npx cc-pipeline@latest run
 
   💡 Tip: Open Claude Code in this project — CLAUDE.md has full
      instructions for writing your brief and running the pipeline.
