@@ -62,6 +62,8 @@ can construct a good initial project brief.
 
 Claude will walk you through the process — asking about your tech stack, features, constraints, and definition of done — then write a polished `BRIEF.md` for you.
 
+![Example of Claude Code building a BRIEF.md through interactive Q&A](docs/brief-example.png)
+
 ### 3. Run the pipeline
 
 Still in Claude Code, use this prompt to kick off the autonomous build:
