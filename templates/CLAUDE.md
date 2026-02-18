@@ -26,13 +26,13 @@ can construct a good initial project brief.
 Execute the pipeline and monitor it:
 
 ```bash
-npx @timothyjoh/cc-pipeline run
+npx @timothyjoh/cc-pipeline@latest run
 ```
 
 If it errors or gets stuck, investigate the issue, fix it, then resume:
 
 ```bash
-npx @timothyjoh/cc-pipeline run
+npx @timothyjoh/cc-pipeline@latest run
 ```
 
 The pipeline resumes from where it left off — state is tracked in `.pipeline/pipeline.jsonl`.
@@ -40,7 +40,7 @@ The pipeline resumes from where it left off — state is tracked in `.pipeline/p
 Check progress anytime:
 
 ```bash
-npx @timothyjoh/cc-pipeline status
+npx @timothyjoh/cc-pipeline@latest status
 ```
 
 ## How the Pipeline Works

@@ -72,7 +72,7 @@ Then create `.pipeline/prompts/security.md` with your prompt template.
 Set per-step in workflow.yaml, or override all steps at runtime:
 
 ```bash
-npx @timothyjoh/cc-pipeline run --model opus
+npx @timothyjoh/cc-pipeline@latest run --model opus
 ```
 
 ## Prompt Templates
@@ -99,4 +99,4 @@ The prompts control the quality and style of each step. Feel free to customize t
 - **Resume from interruption:** Just run again — it picks up from the last event
 - **Restart current phase:** Delete events for the current phase from `pipeline.jsonl`
 - **Full reset:** Delete `pipeline.jsonl` entirely (keeps all config)
-- **Nuclear reset:** Delete the entire `.pipeline/` directory and re-run `npx @timothyjoh/cc-pipeline init`
+- **Nuclear reset:** Delete the entire `.pipeline/` directory and re-run `npx @timothyjoh/cc-pipeline@latest init`

@@ -35,7 +35,7 @@ Then initialize the pipeline in your project:
 
 ```bash
 cd your-project
-npx @timothyjoh/cc-pipeline init
+npx @timothyjoh/cc-pipeline@latest init
 ```
 
 This scaffolds the `.pipeline/` directory, prompt templates, and a `BRIEF.md.example` into your project.
@@ -46,7 +46,7 @@ This scaffolds the `.pipeline/` directory, prompt templates, and a `BRIEF.md.exa
 
 ```bash
 cd your-project
-npx @timothyjoh/cc-pipeline init
+npx @timothyjoh/cc-pipeline@latest init
 ```
 
 ### 2. Write your project brief
@@ -75,16 +75,16 @@ one-at-a-time to build a good brief.
 
 ```bash
 # Run the full pipeline
-npx @timothyjoh/cc-pipeline run
+npx @timothyjoh/cc-pipeline@latest run
 
 # Limit to N phases
-npx @timothyjoh/cc-pipeline run --phases 3
+npx @timothyjoh/cc-pipeline@latest run --phases 3
 
 # Override model for all steps
-npx @timothyjoh/cc-pipeline run --model opus
+npx @timothyjoh/cc-pipeline@latest run --model opus
 
 # Check progress
-npx @timothyjoh/cc-pipeline status
+npx @timothyjoh/cc-pipeline@latest status
 ```
 
 The pipeline resumes from interruptions automatically. Press **Ctrl-C** to pause, then run again to pick up where you left off.
