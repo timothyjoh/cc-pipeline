@@ -75,9 +75,10 @@ If this is phase 1, the spec MUST ALSO include:
    - How to run tests (exact command)
    - How to run tests with coverage (exact command)
    - Project structure overview
-5. Create **CLAUDE.md** at the project root with:
+5. Update **CLAUDE.md** at the project root (it already exists with pipeline instructions — ADD to it, don't overwrite):
    - Emphatic instructions that the agent MUST read AGENTS.md RIGHT AWAY, FIRST THING for all project conventions
    - Brief project description
+   - Keep the existing cc-pipeline section intact
    - This ensures Codex CLI and other agents pick up the same conventions as Claude Code
 6. Create **README.md** at the project root with:
    - Project description

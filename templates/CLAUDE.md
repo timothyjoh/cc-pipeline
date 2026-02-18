@@ -1,4 +1,12 @@
-# CLAUDE.md — cc-pipeline Instructions
+# CLAUDE.md
+
+## ⚠️ FIRST: Read AGENTS.md
+
+If `AGENTS.md` exists, read it NOW before doing anything else. It has project conventions, install steps, test commands, and architecture decisions.
+
+---
+
+## cc-pipeline
 
 This project uses [cc-pipeline](https://github.com/timothyjoh/cc-pipeline) for autonomous development.
 
