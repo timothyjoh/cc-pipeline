@@ -49,39 +49,45 @@ cd your-project
 npx @timothyjoh/cc-pipeline init
 ```
 
-### 2. Write your project brief with Claude
+### 2. Write your project brief
 
-Fire up Claude Code in your project and use this prompt to collaboratively build your brief:
+Copy the example and edit it:
 
-```
-Using the @BRIEF.md.example as a template, we need to discuss this project's
-goals and write a BRIEF.md in the project root. Ask me first for a quick
-description of the project, then ask me questions one-at-a-time so that we
-can construct a good initial project brief.
+```bash
+cp BRIEF.md.example BRIEF.md
 ```
 
-Claude will walk you through the process — asking about your tech stack, features, constraints, and definition of done — then write a polished `BRIEF.md` for you.
+Or let Claude Code help you write it — fire up `claude` in your project and ask:
+
+```
+Using the @BRIEF.md.example as a template, let's discuss this project's goals
+and write a BRIEF.md. Ask me for a quick description first, then ask questions
+one-at-a-time to build a good brief.
+```
 
 ![Example of Claude Code building a BRIEF.md through interactive Q&A](docs/brief-example.png)
 
 ### 3. Run the pipeline
 
-Still in Claude Code, use this prompt to kick off the autonomous build:
+**With Claude Code (recommended):** The `init` command creates a `CLAUDE.md` with full pipeline instructions. Just open Claude Code in your project and tell it to run the pipeline — it already knows what to do.
 
-```
-Run the cc-pipeline using `npx @timothyjoh/cc-pipeline run`. Monitor the
-pipeline output. If it errors or gets stuck, investigate and fix the issue,
-then resume with `npx @timothyjoh/cc-pipeline run`. Check
-`npx @timothyjoh/cc-pipeline status` periodically to track progress.
-```
-
-Claude will execute the pipeline, monitor each phase, and handle any issues that come up.
-
-### 4. Check status anytime
+**Manually:**
 
 ```bash
+# Run the full pipeline
+npx @timothyjoh/cc-pipeline run
+
+# Limit to N phases
+npx @timothyjoh/cc-pipeline run --phases 3
+
+# Override model for all steps
+npx @timothyjoh/cc-pipeline run --model opus
+
+# Check progress
 npx @timothyjoh/cc-pipeline status
 ```
+
+The pipeline resumes from interruptions automatically. Press **Ctrl-C** to pause, then run again to pick up where you left off.
 
 ## Commands
 

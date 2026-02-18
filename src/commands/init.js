@@ -30,22 +30,26 @@ export function init(projectDir, options = {}) {
     console.log('  ✅ Created BRIEF.md.example');
   }
 
+  // Copy CLAUDE.md (pipeline instructions for Claude Code)
+  const claudeMd = join(projectDir, 'CLAUDE.md');
+  if (existsSync(claudeMd)) {
+    console.log('  ⚠️  CLAUDE.md already exists — skipping');
+  } else {
+    cpSync(join(TEMPLATES_DIR, 'CLAUDE.md'), claudeMd);
+    console.log('  ✅ Created CLAUDE.md');
+  }
+
   console.log(`
 Done! Next steps:
 
-  1. Copy and edit your project brief:
+  1. Write your project brief:
      cp BRIEF.md.example BRIEF.md
+     (or open Claude Code and it'll help you write one — see CLAUDE.md)
 
-  2. Describe what you want built in BRIEF.md
-     (or ask your favorite AI to help you write one)
+  2. Run the pipeline:
+     npx @timothyjoh/cc-pipeline run
 
-  3. Run the pipeline:
-     npx cc-pipeline run
-
-  💡 Tip: A good BRIEF.md includes:
-     - What the project does
-     - Tech stack preferences
-     - Key features (prioritized)
-     - Any constraints or requirements
+  💡 Tip: Open Claude Code in this project — CLAUDE.md has full
+     instructions for writing your brief and running the pipeline.
 `);
 }
