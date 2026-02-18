@@ -17,6 +17,11 @@ Think of it as a CI/CD system for AI-driven development—but instead of deployi
 
 - **Node.js** >=18
 - **Claude CLI** (`claude`) installed and configured ([get it here](https://docs.claude.ai/docs/claude-cli))
+- **tmux** — Required for interactive build/fix steps (Claude runs inside tmux sessions)
+  - macOS: `brew install tmux`
+  - Ubuntu/Debian: `sudo apt install tmux`
+  - Fedora: `sudo dnf install tmux`
+- **git** — For the commit step (you probably already have this)
 
 ## Installation
 
@@ -26,36 +31,54 @@ This package is published to [GitHub Packages](https://github.com/timothyjoh/cc-
 echo "@timothyjoh:registry=https://npm.pkg.github.com" >> ~/.npmrc
 ```
 
-Then install globally:
+Then initialize the pipeline in your project:
 
 ```bash
-npm install -g @timothyjoh/cc-pipeline
-```
-
-Or run directly with npx:
-
-```bash
+cd your-project
 npx @timothyjoh/cc-pipeline init
 ```
 
-> **Note:** You may need to [authenticate with GitHub Packages](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry#authenticating-to-github-packages) if installing from a private network.
+This scaffolds the `.pipeline/` directory, prompt templates, and a `BRIEF.md.example` into your project.
 
 ## Quick Start
 
+### 1. Initialize the pipeline
+
 ```bash
-# 1. Initialize pipeline in your project
 cd your-project
-cc-pipeline init
+npx @timothyjoh/cc-pipeline init
+```
 
-# 2. Create your project brief
-cp BRIEF.md.example BRIEF.md
-# Edit BRIEF.md to describe what you want built
+### 2. Write your project brief with Claude
 
-# 3. Run the pipeline
-cc-pipeline run
+Fire up Claude Code in your project and use this prompt to collaboratively build your brief:
 
-# 4. Check status anytime
-cc-pipeline status
+```
+Using the @BRIEF.md.example as a template, we need to discuss this project's
+goals and write a BRIEF.md in the project root. Ask me first for a quick
+description of the project, then ask me questions one-at-a-time so that we
+can construct a good initial project brief.
+```
+
+Claude will walk you through the process — asking about your tech stack, features, constraints, and definition of done — then write a polished `BRIEF.md` for you.
+
+### 3. Run the pipeline
+
+Still in Claude Code, use this prompt to kick off the autonomous build:
+
+```
+Run the cc-pipeline using `npx @timothyjoh/cc-pipeline run`. Monitor the
+pipeline output. If it errors or gets stuck, investigate and fix the issue,
+then resume with `npx @timothyjoh/cc-pipeline run`. Check
+`npx @timothyjoh/cc-pipeline status` periodically to track progress.
+```
+
+Claude will execute the pipeline, monitor each phase, and handle any issues that come up.
+
+### 4. Check status anytime
+
+```bash
+npx @timothyjoh/cc-pipeline status
 ```
 
 ## Commands
