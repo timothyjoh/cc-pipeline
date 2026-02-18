@@ -12,9 +12,11 @@ Current phase: {{PHASE}}
 
 ## Agent Team Strategy — MANDATORY
 
-**You MUST create an agent team to parallelize the work.** Do NOT implement everything yourself sequentially. This is not optional — agent teams are how this pipeline works.
+**You MUST use Claude Code Agent Teams to parallelize the work.** Do NOT implement everything yourself sequentially. This is not optional — agent teams are how this pipeline works.
 
-Agent teams are enabled in this session (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). You are the **team lead**. Create teammates, assign tasks, and coordinate their work.
+**⚠️ Do NOT use the Task tool or "sub-agents."** Agent Teams are a different feature. Agent Teams give each teammate their own context window, a shared task list with dependency tracking, and an inter-agent mailbox. The Task tool is inferior — it has no coordination, no mailbox, no shared task list.
+
+Agent teams are enabled in this session (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). You are the **team lead**. Create a team, spawn teammates, assign tasks via the shared task list, and coordinate via the mailbox.
 
 ### Team Structure
 
@@ -53,7 +55,10 @@ Agent teams are enabled in this session (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
 7. Resolve any integration issues yourself
 ```
 
-**Anti-pattern: Do NOT skip creating an agent team and write all code yourself.** The whole point is parallel execution with separate contexts for testing and building.
+**Anti-patterns:**
+- ❌ Do NOT use the `Task` tool or "sub-agents" — use Agent Teams instead
+- ❌ Do NOT write all code yourself sequentially — create teammates
+- ❌ Do NOT skip the shared task list — it's how teammates coordinate
 
 ## Quality Gates (before finishing)
 
