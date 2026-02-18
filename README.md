@@ -20,17 +20,25 @@ Think of it as a CI/CD system for AI-driven development—but instead of deployi
 
 ## Installation
 
-Install globally via npm:
+This package is published to [GitHub Packages](https://github.com/timothyjoh/cc-pipeline/packages). First, configure npm to use the GitHub registry for the `@timothyjoh` scope:
 
 ```bash
-npm install -g cc-pipeline
+echo "@timothyjoh:registry=https://npm.pkg.github.com" >> ~/.npmrc
+```
+
+Then install globally:
+
+```bash
+npm install -g @timothyjoh/cc-pipeline
 ```
 
 Or run directly with npx:
 
 ```bash
-npx cc-pipeline init
+npx @timothyjoh/cc-pipeline init
 ```
+
+> **Note:** You may need to [authenticate with GitHub Packages](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry#authenticating-to-github-packages) if installing from a private network.
 
 ## Quick Start
 
@@ -282,7 +290,7 @@ your-project/
 
 ```bash
 # Clone the repo
-git clone https://github.com/YOUR_USERNAME/cc-pipeline.git
+git clone https://github.com/timothyjoh/cc-pipeline.git
 cd cc-pipeline
 
 # Install dependencies
