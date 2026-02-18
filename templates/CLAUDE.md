@@ -59,3 +59,7 @@ Each phase runs through these steps in order:
 Phase outputs are saved to `docs/phases/phase-N/`.
 
 The pipeline stops automatically when the project is complete (`PROJECT COMPLETE` in REFLECTIONS.md).
+
+## Customizing the Pipeline
+
+See `.pipeline/CLAUDE.md` for full configuration docs — how to edit workflow steps, change agents/models, customize prompts, and add new steps.
