@@ -179,7 +179,9 @@ export class ClaudeInteractiveAgent extends BaseAgent {
     const safeSession = shellEscape(sessionName);
     const instruction = `Read and follow all instructions in @${promptFile}`;
     const safeInstruction = shellEscape(instruction);
-    execSync(`tmux send-keys -t "${safeSession}" "${safeInstruction}" Enter Enter Enter`);
+    execSync(`tmux send-keys -t "${safeSession}" "${safeInstruction}"`);
+    execSync(`sleep 0.5`);
+    execSync(`tmux send-keys -t "${safeSession}" Enter`);
   }
 
   /**
