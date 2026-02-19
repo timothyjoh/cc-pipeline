@@ -15,6 +15,11 @@
 2. **Feature Two** — Description
 3. **Feature Three** — Description
 
+## UI & Design (optional)
+<!-- What UI/component library? What design style? -->
+<!-- Examples: "Tailwind + shadcn/ui", "Material UI", "Chakra, dark theme" -->
+<!-- If left blank, the spec phase will pick a well-regarded standard for your framework. -->
+
 ## Constraints
 <!-- Any hard requirements, limitations, or preferences. -->
 <!-- Examples: "Must use PostgreSQL", "No external APIs", "Needs auth" -->

@@ -87,6 +87,15 @@ If this is phase 1, the spec MUST ALSO include:
 
 Phase 1 is the foundation. Every future phase depends on a solid test framework and clear documentation.
 
+## UI & Design Standards
+
+If the project has a user interface:
+- Check BRIEF.md for a **UI & Design** section with the user's preferred library/style
+- If the user specified a UI library (e.g., Tailwind + shadcn/ui, Material UI), use it
+- **If the user did NOT specify**: choose the most popular, well-regarded UI library for the project's framework (e.g., shadcn/ui for React/Next.js, Vuetify for Vue, Angular Material for Angular) and document the choice with rationale in the spec
+- A frontend-design skill is installed at `.claude/skills/frontend-design/SKILL.md` — follow its guidelines for visual quality
+- The goal is professional, polished UI from phase 1 — not bare HTML that gets styled later
+
 ## Critical: Vertical Slices Only
 
 Every phase MUST deliver a small, vertical slice of the application — a user-visible feature that works end-to-end. 

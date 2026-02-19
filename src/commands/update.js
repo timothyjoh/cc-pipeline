@@ -1,11 +1,11 @@
-import { existsSync, cpSync } from 'node:fs';
+import { existsSync, cpSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEMPLATES_DIR = join(__dirname, '..', '..', 'templates');
 
-export function update(projectDir) {
+export async function update(projectDir) {
   const pipelineDir = join(projectDir, '.pipeline');
 
   if (!existsSync(pipelineDir)) {
@@ -32,6 +32,23 @@ export function update(projectDir) {
     console.log('  ✅ Created CLAUDE.md');
   } else {
     console.log('  ⏭️  CLAUDE.md exists — skipped (edit manually if needed)');
+  }
+
+  // Fetch/update Anthropic's frontend-design skill
+  const skillDir = join(projectDir, '.claude', 'skills', 'frontend-design');
+  const skillUrl = 'https://raw.githubusercontent.com/anthropics/claude-code/main/plugins/frontend-design/skills/frontend-design/SKILL.md';
+  try {
+    const res = await fetch(skillUrl);
+    if (res.ok) {
+      const content = await res.text();
+      mkdirSync(skillDir, { recursive: true });
+      writeFileSync(join(skillDir, 'SKILL.md'), content);
+      console.log('  ✅ Updated frontend-design skill (from Anthropic)');
+    } else {
+      console.log('  ⚠️  Could not fetch frontend-design skill (HTTP ' + res.status + ') — skipping');
+    }
+  } catch (e) {
+    console.log('  ⚠️  Could not fetch frontend-design skill (offline?) — skipping');
   }
 
   console.log(`

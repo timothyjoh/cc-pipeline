@@ -38,7 +38,7 @@ export async function run(args) {
 
   switch (command) {
     case 'init':
-      init(process.cwd(), options);
+      await init(process.cwd(), options);
       break;
     case 'run':
       await runPipeline(process.cwd(), options);
@@ -50,7 +50,7 @@ export async function run(args) {
       reset(process.cwd());
       break;
     case 'update':
-      update(process.cwd());
+      await update(process.cwd());
       break;
     default:
       console.error(`Unknown command: ${command}`);
