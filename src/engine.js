@@ -283,6 +283,13 @@ async function runStep(phase, stepDef, projectDir, config, logFile, options = {}
     result = { exitCode: 1, outputPath: null, error: err.message };
   }
 
+  // If interrupted, don't log step_done — the signal handler already wrote
+  // the 'interrupted' event, and we want that to be the last event so
+  // resume logic treats this step as needing retry (status: 'running').
+  if (agentState.isInterrupted()) {
+    return 'error';
+  }
+
   // Log step done
   const status = result.exitCode === 0 ? 'ok' : 'error';
   appendEvent(logFile, {
