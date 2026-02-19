@@ -1,8 +1,14 @@
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { init } from './commands/init.js';
 import { runPipeline } from './commands/run.js';
 import { status } from './commands/status.js';
 import { reset } from './commands/reset.js';
 import { update } from './commands/update.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PKG = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'));
 
 const HELP = `
 cc-pipeline — Autonomous Claude Code pipeline engine
@@ -28,6 +34,11 @@ Examples:
 
 export async function run(args) {
   const command = args[0];
+
+  if (command === '--version' || command === '-v' || command === 'version') {
+    console.log(`cc-pipeline v${PKG.version}`);
+    process.exit(0);
+  }
 
   if (!command || command === '--help' || command === '-h') {
     console.log(HELP);

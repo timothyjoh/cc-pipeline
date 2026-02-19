@@ -1,9 +1,10 @@
-import { existsSync, cpSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, cpSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEMPLATES_DIR = join(__dirname, '..', '..', 'templates');
+const PKG = JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf-8'));
 
 export async function update(projectDir) {
   const pipelineDir = join(projectDir, '.pipeline');
@@ -52,6 +53,8 @@ export async function update(projectDir) {
   }
 
   console.log(`
+  ✅ Updated to cc-pipeline v${PKG.version}
+
   ⚠️  workflow.yaml was NOT changed (your customizations are preserved).
   If you need the latest default workflow, delete .pipeline/workflow.yaml
   and run \`cc-pipeline init\` again.
