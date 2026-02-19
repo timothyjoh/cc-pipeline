@@ -231,30 +231,24 @@ export class ClaudeInteractiveAgent extends BaseAgent {
       return;
     }
 
-    // Send exit command — must dismiss autocomplete dropdown first
-    // "/exit" triggers autocomplete; Escape dismisses it; then Enter submits
-    execSync(`tmux send-keys -t "${safeSession}" "/exit"`);
+    // Double Ctrl-C to exit Claude Code — more reliable than /exit
+    // which gets tripped up by autocomplete dropdowns
+    execSync(`tmux send-keys -t "${safeSession}" C-c`);
     await this.sleep(500);
-    execSync(`tmux send-keys -t "${safeSession}" Escape`);
-    await this.sleep(300);
-    execSync(`tmux send-keys -t "${safeSession}" Enter`);
+    execSync(`tmux send-keys -t "${safeSession}" C-c`);
     await this.sleep(3000);
 
-    // Verify it actually exited — if not, try harder
+    // Verify it actually exited
     try {
       const paneAfter = execSync(
         `tmux capture-pane -t "${safeSession}" -p -S -3 2>/dev/null`,
         { encoding: 'utf-8' }
       );
       if (!/(^\$|%\s*$|❯\s*$)/.test(paneAfter)) {
-        // Still in Claude — send Ctrl-C then /exit again
+        // Still in Claude — hit it again
         execSync(`tmux send-keys -t "${safeSession}" C-c`);
         await this.sleep(500);
-        execSync(`tmux send-keys -t "${safeSession}" "/exit"`);
-        await this.sleep(500);
-        execSync(`tmux send-keys -t "${safeSession}" Escape`);
-        await this.sleep(300);
-        execSync(`tmux send-keys -t "${safeSession}" Enter`);
+        execSync(`tmux send-keys -t "${safeSession}" C-c`);
         await this.sleep(3000);
       }
     } catch (e) {
