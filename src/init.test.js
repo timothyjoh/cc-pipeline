@@ -11,8 +11,8 @@ import { status } from './commands/status.js';
  * Tests the complete init workflow
  */
 
-// Helper to capture console.log output
-function captureConsole(fn) {
+// Helper to capture console.log output (supports async functions)
+async function captureConsole(fn) {
   const originalLog = console.log;
   const originalError = console.error;
   const output = [];
@@ -26,7 +26,7 @@ function captureConsole(fn) {
   };
 
   try {
-    fn();
+    await fn();
   } finally {
     console.log = originalLog;
     console.error = originalError;
@@ -35,11 +35,11 @@ function captureConsole(fn) {
   return output;
 }
 
-test('init: creates .pipeline directory with expected files', () => {
+test('init: creates .pipeline directory with expected files', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'cc-pipeline-test-'));
 
-  const output = captureConsole(() => {
-    init(tempDir);
+  const output = await captureConsole(async () => {
+    await init(tempDir);
   });
 
   // Verify .pipeline directory exists
@@ -53,11 +53,11 @@ test('init: creates .pipeline directory with expected files', () => {
   rmSync(tempDir, { recursive: true });
 });
 
-test('init: creates BRIEF.md.example', () => {
+test('init: creates BRIEF.md.example', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'cc-pipeline-test-'));
 
-  const output = captureConsole(() => {
-    init(tempDir);
+  const output = await captureConsole(async () => {
+    await init(tempDir);
   });
 
   // Verify BRIEF.md.example exists
@@ -71,11 +71,11 @@ test('init: creates BRIEF.md.example', () => {
   rmSync(tempDir, { recursive: true });
 });
 
-test('init: creates workflow.yaml', () => {
+test('init: creates workflow.yaml', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'cc-pipeline-test-'));
 
-  const output = captureConsole(() => {
-    init(tempDir);
+  const output = await captureConsole(async () => {
+    await init(tempDir);
   });
 
   // Verify workflow.yaml exists
@@ -90,11 +90,11 @@ test('init: creates workflow.yaml', () => {
   rmSync(tempDir, { recursive: true });
 });
 
-test('init: creates prompts directory', () => {
+test('init: creates prompts directory', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'cc-pipeline-test-'));
 
-  const output = captureConsole(() => {
-    init(tempDir);
+  const output = await captureConsole(async () => {
+    await init(tempDir);
   });
 
   // Verify prompts directory exists
@@ -108,12 +108,12 @@ test('init: creates prompts directory', () => {
   rmSync(tempDir, { recursive: true });
 });
 
-test('init: is idempotent - running again does not overwrite', () => {
+test('init: is idempotent - running again does not overwrite', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'cc-pipeline-test-'));
 
   // Run init first time
-  const output1 = captureConsole(() => {
-    init(tempDir);
+  const output1 = await captureConsole(async () => {
+    await init(tempDir);
   });
 
   // Verify .pipeline was created
@@ -121,8 +121,8 @@ test('init: is idempotent - running again does not overwrite', () => {
   assert.ok(existsSync(pipelineDir));
 
   // Run init second time
-  const output2 = captureConsole(() => {
-    init(tempDir);
+  const output2 = await captureConsole(async () => {
+    await init(tempDir);
   });
 
   // Should indicate that .pipeline already exists
@@ -132,7 +132,7 @@ test('init: is idempotent - running again does not overwrite', () => {
   rmSync(tempDir, { recursive: true });
 });
 
-test('init: does not overwrite existing BRIEF.md', () => {
+test('init: does not overwrite existing BRIEF.md', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'cc-pipeline-test-'));
 
   // Create BRIEF.md first
@@ -141,8 +141,8 @@ test('init: does not overwrite existing BRIEF.md', () => {
   writeFileSync(briefPath, originalContent, 'utf8');
 
   // Run init
-  const output = captureConsole(() => {
-    init(tempDir);
+  const output = await captureConsole(async () => {
+    await init(tempDir);
   });
 
   // BRIEF.md should still have original content
@@ -156,16 +156,16 @@ test('init: does not overwrite existing BRIEF.md', () => {
   rmSync(tempDir, { recursive: true });
 });
 
-test('status: shows "Not Started" for uninitialized project', () => {
+test('status: shows "Not Started" for uninitialized project', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'cc-pipeline-test-'));
 
   // Create .pipeline but no pipeline.jsonl
-  const output1 = captureConsole(() => {
-    init(tempDir);
+  const output1 = await captureConsole(async () => {
+    await init(tempDir);
   });
 
   // Run status
-  const output = captureConsole(() => {
+  const output = await captureConsole(() => {
     status(tempDir);
   });
 
@@ -175,21 +175,18 @@ test('status: shows "Not Started" for uninitialized project', () => {
   rmSync(tempDir, { recursive: true });
 });
 
-test('status: works after init without crashing', () => {
+test('status: works after init without crashing', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'cc-pipeline-test-'));
 
   // Run init
-  const initOutput = captureConsole(() => {
-    init(tempDir);
+  const initOutput = await captureConsole(async () => {
+    await init(tempDir);
   });
 
   // Run status - should not crash
-  let statusOutput;
-  assert.doesNotThrow(() => {
-    statusOutput = captureConsole(() => {
-      status(tempDir);
-    });
-  }, 'status command should not crash after init');
+  const statusOutput = await captureConsole(() => {
+    status(tempDir);
+  });
 
   // Should produce some output
   assert.ok(statusOutput.length > 0, 'status should produce output');
@@ -197,11 +194,11 @@ test('status: works after init without crashing', () => {
   rmSync(tempDir, { recursive: true });
 });
 
-test('init: prints helpful next steps', () => {
+test('init: prints helpful next steps', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'cc-pipeline-test-'));
 
-  const output = captureConsole(() => {
-    init(tempDir);
+  const output = await captureConsole(async () => {
+    await init(tempDir);
   });
 
   const messages = output.map(o => o.message).join('\n');
@@ -213,11 +210,11 @@ test('init: prints helpful next steps', () => {
   rmSync(tempDir, { recursive: true });
 });
 
-test('init: creates expected directory structure', () => {
+test('init: creates expected directory structure', async () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'cc-pipeline-test-'));
 
-  captureConsole(() => {
-    init(tempDir);
+  await captureConsole(async () => {
+    await init(tempDir);
   });
 
   // Check expected paths exist
@@ -232,6 +229,46 @@ test('init: creates expected directory structure', () => {
     const fullPath = join(tempDir, path);
     assert.ok(existsSync(fullPath), `${path} should exist`);
   }
+
+  rmSync(tempDir, { recursive: true });
+});
+
+test('init: handles frontend-design skill fetch failure gracefully', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'cc-pipeline-test-'));
+
+  // init will try to fetch the skill from GitHub — in test env this may fail
+  // Either way it should not throw and should complete successfully
+  const output = await captureConsole(async () => {
+    await init(tempDir);
+  });
+
+  const messages = output.map(o => o.message).join('\n');
+
+  // Should either succeed or show a warning — not crash
+  const skillHandled = messages.includes('frontend-design skill');
+  assert.ok(skillHandled, 'Should handle frontend-design skill (installed or skipped gracefully)');
+
+  // If skill dir exists, SKILL.md should too — no partial state
+  const skillDir = join(tempDir, '.claude', 'skills', 'frontend-design');
+  if (existsSync(skillDir)) {
+    assert.ok(existsSync(join(skillDir, 'SKILL.md')), 'If skill dir exists, SKILL.md should too');
+  }
+
+  rmSync(tempDir, { recursive: true });
+});
+
+test('init: BRIEF.md.example contains UI & Design section', async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'cc-pipeline-test-'));
+
+  await captureConsole(async () => {
+    await init(tempDir);
+  });
+
+  const briefExample = join(tempDir, 'BRIEF.md.example');
+  assert.ok(existsSync(briefExample), 'BRIEF.md.example should exist');
+
+  const content = readFileSync(briefExample, 'utf8');
+  assert.ok(content.includes('UI & Design'), 'BRIEF.md.example should contain UI & Design section');
 
   rmSync(tempDir, { recursive: true });
 });
