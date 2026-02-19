@@ -90,6 +90,11 @@ export function getCurrentState(logFile) {
     case 'step_start':
       return { phase, step, status: 'running' };
     case 'step_done':
+      // If the step ended with an error, treat it as needing retry (not complete)
+      if (lastEvent.status === 'error' || (lastEvent.exitCode && lastEvent.exitCode !== 0)) {
+        return { phase, step, status: 'error' };
+      }
+      return { phase, step, status: 'complete' };
     case 'step_skip':
       return { phase, step, status: 'complete' };
     case 'phase_complete':
@@ -121,7 +126,8 @@ export function deriveResumePoint(logFile, steps) {
   }
 
   // Currently running a step - resume it
-  if (status === 'running') {
+  // Step ended with error - retry it
+  if (status === 'running' || status === 'error') {
     return { phase, stepName: step };
   }
 
