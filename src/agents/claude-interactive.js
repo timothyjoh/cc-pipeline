@@ -171,13 +171,14 @@ export class ClaudeInteractiveAgent extends BaseAgent {
   /**
    * Deliver the prompt to the interactive session via tmux.
    * Instead of pasting the full prompt (fragile with large text),
-   * we tell Claude to read the prompt file directly using @-mention syntax.
+   * we tell Claude to read the prompt file directly by path (no @ prefix,
+   * which triggers autocomplete and causes glitchy input).
    * @param {string} promptFile - Path to the prompt file
    * @param {string} sessionName - Tmux session name
    */
   async deliverPrompt(promptFile, sessionName) {
     const safeSession = shellEscape(sessionName);
-    const instruction = `Read and follow all instructions in @${promptFile}`;
+    const instruction = `Read and follow all instructions in ${promptFile}`;
     const safeInstruction = shellEscape(instruction);
     execSync(`tmux send-keys -t "${safeSession}" "${safeInstruction}"`);
     await this.sleep(500);

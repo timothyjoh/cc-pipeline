@@ -1,6 +1,6 @@
 {
   "name": "cc-pipeline",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Autonomous Claude Code pipeline engine. Install into any repo, write a BRIEF.md, and let Claude build your project phase by phase.",
   "type": "module",
   "bin": {
