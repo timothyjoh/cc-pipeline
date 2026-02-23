@@ -1,43 +1,300 @@
 import { test, mock } from 'node:test';
 import assert from 'node:assert';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
-test('deliverPrompt: sends text and Enter as separate execSync calls', async () => {
-  // Mock execSync before importing the module
-  const calls = [];
-  const mockExecSync = mock.fn((...args) => {
-    calls.push(args[0]);
+/**
+ * Unit tests for ClaudeInteractiveAgent (SDK-based implementation)
+ * and --ui / --no-ui CLI flag parsing.
+ */
+
+// Helper: build a minimal async generator from an array of events
+async function* eventsFrom(events) {
+  for (const e of events) yield e;
+}
+
+function setupTempProject() {
+  const projectDir = mkdtempSync(join(tmpdir(), 'cc-interactive-test-'));
+  mkdirSync(join(projectDir, '.pipeline'), { recursive: true });
+  mkdirSync(join(projectDir, 'prompts'), { recursive: true });
+  writeFileSync(join(projectDir, 'prompts', 'build.md'), 'build the project', 'utf-8');
+  return projectDir;
+}
+
+function makeContext(projectDir) {
+  return {
+    projectDir,
+    config: { project: { name: 'test' }, workflow: { steps: [] } },
+    logFile: null,
+  };
+}
+
+const STEP = { name: 'build', agent: 'claude-interactive' };
+const PHASE = 1;
+const PROMPT_PATH = 'prompts/build.md';
+
+const ASSISTANT_EVENT = {
+  type: 'assistant',
+  message: {
+    role: 'assistant',
+    content: [{ type: 'text', text: 'Build complete.' }],
+  },
+};
+
+// ─── Agent tests ────────────────────────────────────────────────────────────
+
+test('ClaudeInteractiveAgent: exitCode 0 on success, writes assistant text to outputPath', async () => {
+  if (typeof mock.module !== 'function') return;
+
+  const projectDir = setupTempProject();
+
+  mock.module('@anthropic-ai/claude-agent-sdk', {
+    namedExports: {
+      query: (_opts) => eventsFrom([ASSISTANT_EVENT]),
+    },
   });
 
-  // We need to verify the source code pattern directly since we can't
-  // easily mock execSync in ESM. Read and verify the implementation.
+  const { ClaudeInteractiveAgent } = await import('./agents/claude-interactive.js');
+  const agent = new ClaudeInteractiveAgent();
+  const result = await agent.run(PHASE, STEP, PROMPT_PATH, 'default', makeContext(projectDir));
+
+  assert.strictEqual(result.exitCode, 0);
+  assert.ok(existsSync(result.outputPath), 'outputPath should exist');
+  const output = readFileSync(result.outputPath, 'utf-8');
+  assert.ok(output.includes('Build complete.'), 'output should contain assistant text');
+
+  mock.restoreAll();
+  rmSync(projectDir, { recursive: true, force: true });
+});
+
+test('ClaudeInteractiveAgent: exitCode 1 on thrown error, writes error to outputPath', async () => {
+  if (typeof mock.module !== 'function') return;
+
+  const projectDir = setupTempProject();
+
+  async function* throwingQuery() {
+    throw new Error('SDK error');
+    // eslint-disable-next-line no-unreachable
+    yield;
+  }
+
+  mock.module('@anthropic-ai/claude-agent-sdk', {
+    namedExports: { query: throwingQuery },
+  });
+
+  const { ClaudeInteractiveAgent } = await import('./agents/claude-interactive.js');
+  const agent = new ClaudeInteractiveAgent();
+  const result = await agent.run(PHASE, STEP, PROMPT_PATH, 'claude-sonnet-4-5', makeContext(projectDir));
+
+  assert.strictEqual(result.exitCode, 1);
+  assert.ok(existsSync(result.outputPath), 'outputPath should exist on error');
+  const output = readFileSync(result.outputPath, 'utf-8');
+  assert.ok(output.includes('SDK error'), 'error message should be in output');
+
+  mock.restoreAll();
+  rmSync(projectDir, { recursive: true, force: true });
+});
+
+test('ClaudeInteractiveAgent: exitCode 130 when agentState.interrupted before run', async () => {
+  if (typeof mock.module !== 'function') return;
+
+  const projectDir = setupTempProject();
+
+  let queryCalled = false;
+  mock.module('@anthropic-ai/claude-agent-sdk', {
+    namedExports: {
+      query: async function* () { queryCalled = true; yield; },
+    },
+  });
+
+  const { ClaudeInteractiveAgent } = await import('./agents/claude-interactive.js');
+  const { agentState } = await import('./agents/base.js');
+
+  agentState.setInterrupted(true);
+  const agent = new ClaudeInteractiveAgent();
+  const result = await agent.run(PHASE, STEP, PROMPT_PATH, 'default', makeContext(projectDir));
+
+  assert.strictEqual(result.exitCode, 130);
+  assert.strictEqual(queryCalled, false, 'query should not be called when already interrupted');
+
+  agentState.setInterrupted(false);
+  mock.restoreAll();
+  rmSync(projectDir, { recursive: true, force: true });
+});
+
+test('ClaudeInteractiveAgent: model not passed when model === "default"', async () => {
+  if (typeof mock.module !== 'function') return;
+
+  const projectDir = setupTempProject();
+
+  let capturedOptions = null;
+  mock.module('@anthropic-ai/claude-agent-sdk', {
+    namedExports: {
+      query: async function* ({ options }) {
+        capturedOptions = options;
+        yield ASSISTANT_EVENT;
+      },
+    },
+  });
+
+  const { ClaudeInteractiveAgent } = await import('./agents/claude-interactive.js');
+  const agent = new ClaudeInteractiveAgent();
+  await agent.run(PHASE, STEP, PROMPT_PATH, 'default', makeContext(projectDir));
+
+  assert.ok(!('model' in capturedOptions), 'model should NOT be set when model === "default"');
+
+  mock.restoreAll();
+  rmSync(projectDir, { recursive: true, force: true });
+});
+
+test('ClaudeInteractiveAgent: model passed when model is a real identifier', async () => {
+  if (typeof mock.module !== 'function') return;
+
+  const projectDir = setupTempProject();
+
+  let capturedOptions = null;
+  mock.module('@anthropic-ai/claude-agent-sdk', {
+    namedExports: {
+      query: async function* ({ options }) {
+        capturedOptions = options;
+        yield ASSISTANT_EVENT;
+      },
+    },
+  });
+
+  const { ClaudeInteractiveAgent } = await import('./agents/claude-interactive.js');
+  const agent = new ClaudeInteractiveAgent();
+  await agent.run(PHASE, STEP, PROMPT_PATH, 'claude-opus-4-6', makeContext(projectDir));
+
+  assert.strictEqual(capturedOptions?.model, 'claude-opus-4-6');
+
+  mock.restoreAll();
+  rmSync(projectDir, { recursive: true, force: true });
+});
+
+test('ClaudeInteractiveAgent: tool hooks write to outputPath', async () => {
+  if (typeof mock.module !== 'function') return;
+
+  const projectDir = setupTempProject();
+
+  // Simulate a PreToolUse / PostToolUse hook by having query fire hooks via options
+  let capturedHooks = null;
+  mock.module('@anthropic-ai/claude-agent-sdk', {
+    namedExports: {
+      query: async function* ({ options }) {
+        capturedHooks = options.hooks;
+        // Fire the hooks manually to simulate tool use
+        await capturedHooks.PreToolUse[0]({ tool_name: 'Bash', tool_input: { command: 'ls' } });
+        await capturedHooks.PostToolUse[0]({ tool_name: 'Bash', tool_response: { is_error: false } });
+        yield ASSISTANT_EVENT;
+      },
+    },
+  });
+
+  const { ClaudeInteractiveAgent } = await import('./agents/claude-interactive.js');
+  const agent = new ClaudeInteractiveAgent();
+  const result = await agent.run(PHASE, STEP, PROMPT_PATH, 'default', makeContext(projectDir));
+
+  assert.strictEqual(result.exitCode, 0);
+  const output = readFileSync(result.outputPath, 'utf-8');
+  assert.ok(output.includes('[tool:start] Bash'), 'output should contain tool:start line');
+  assert.ok(output.includes('[tool:done]  Bash ✓'), 'output should contain tool:done line');
+
+  mock.restoreAll();
+  rmSync(projectDir, { recursive: true, force: true });
+});
+
+test('ClaudeInteractiveAgent: pipelineEvents fires tool:start and tool:done', async () => {
+  if (typeof mock.module !== 'function') return;
+
+  const projectDir = setupTempProject();
+
+  let capturedHooks = null;
+  mock.module('@anthropic-ai/claude-agent-sdk', {
+    namedExports: {
+      query: async function* ({ options }) {
+        capturedHooks = options.hooks;
+        await capturedHooks.PreToolUse[0]({ tool_name: 'Read', tool_input: { file_path: '/foo' } });
+        await capturedHooks.PostToolUse[0]({ tool_name: 'Read', tool_response: { is_error: false } });
+        yield ASSISTANT_EVENT;
+      },
+    },
+  });
+
+  const { ClaudeInteractiveAgent, pipelineEvents } = await import('./agents/claude-interactive.js');
+  const agent = new ClaudeInteractiveAgent();
+
+  const startEvents = [];
+  const doneEvents = [];
+  const onStart = (d) => startEvents.push(d);
+  const onDone = (d) => doneEvents.push(d);
+  pipelineEvents.on('tool:start', onStart);
+  pipelineEvents.on('tool:done', onDone);
+
+  await agent.run(PHASE, STEP, PROMPT_PATH, 'default', makeContext(projectDir));
+
+  pipelineEvents.off('tool:start', onStart);
+  pipelineEvents.off('tool:done', onDone);
+
+  assert.strictEqual(startEvents.length, 1, 'should fire one tool:start');
+  assert.strictEqual(startEvents[0].tool, 'Read');
+  assert.strictEqual(doneEvents.length, 1, 'should fire one tool:done');
+  assert.strictEqual(doneEvents[0].success, true);
+
+  mock.restoreAll();
+  rmSync(projectDir, { recursive: true, force: true });
+});
+
+test('ClaudeInteractiveAgent: createAgent() returns a ClaudeInteractiveAgent instance', async () => {
+  const { ClaudeInteractiveAgent, createAgent } = await import('./agents/claude-interactive.js');
+  const agent = createAgent();
+  assert.ok(agent instanceof ClaudeInteractiveAgent);
+});
+
+// ─── CLI flag tests ──────────────────────────────────────────────────────────
+
+// Extract parseOptions via source import trick (ESM doesn't export it, so we test behavior)
+// We test it by reading the source and verifying the pattern, then test the exported run() function.
+
+test('CLI: --ui flag sets options.ui = true', async () => {
+  // Read cli.js source and verify --ui parsing is present
   const { readFileSync } = await import('node:fs');
-  const { join, dirname } = await import('node:path');
+  const { join: pathJoin, dirname } = await import('node:path');
   const { fileURLToPath } = await import('node:url');
+  const __dir = dirname(fileURLToPath(import.meta.url));
+  const source = readFileSync(pathJoin(__dir, 'cli.js'), 'utf8');
+  assert.ok(source.includes("args[i] === '--ui'"), 'should parse --ui flag');
+  assert.ok(source.includes("opts.ui = true"), 'should set opts.ui = true');
+});
 
-  const __dirname = dirname(fileURLToPath(import.meta.url));
-  const source = readFileSync(join(__dirname, 'agents', 'claude-interactive.js'), 'utf8');
+test('CLI: --no-ui flag sets options.noUi = true', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { join: pathJoin, dirname } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const __dir = dirname(fileURLToPath(import.meta.url));
+  const source = readFileSync(pathJoin(__dir, 'cli.js'), 'utf8');
+  assert.ok(source.includes("args[i] === '--no-ui'"), 'should parse --no-ui flag');
+  assert.ok(source.includes("opts.noUi = true"), 'should set opts.noUi = true');
+});
 
-  // Find the deliverPrompt method
-  const methodMatch = source.match(/async deliverPrompt\([^)]*\)\s*\{([\s\S]*?)\n  \}/);
-  assert.ok(methodMatch, 'deliverPrompt method should exist');
+test('CLI: useTUI logic — --ui always launches TUI', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { join: pathJoin, dirname } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const __dir = dirname(fileURLToPath(import.meta.url));
+  const source = readFileSync(pathJoin(__dir, 'cli.js'), 'utf8');
+  assert.ok(source.includes('options.ui ?? (options.noUi ? false : process.stdout.isTTY)'),
+    'should compute useTUI based on flags and TTY');
+});
 
-  const methodBody = methodMatch[1];
+test('CLI: useTUI logic — unit test the expression', () => {
+  // Test the logic directly as a pure expression
+  const computeUseTUI = (options, isTTY) =>
+    options.ui ?? (options.noUi ? false : isTTY);
 
-  // Verify: there should be separate execSync calls for text and Enter
-  const execSyncCalls = methodBody.match(/execSync\(/g);
-  assert.ok(execSyncCalls, 'deliverPrompt should call execSync');
-  assert.ok(execSyncCalls.length >= 2, `deliverPrompt should have at least 2 execSync calls, found ${execSyncCalls.length}`);
-
-  // The send-keys call with the instruction text should NOT include Enter
-  const sendKeysLines = methodBody.split('\n').filter(l => l.includes('send-keys'));
-  assert.ok(sendKeysLines.length >= 2, 'Should have at least 2 send-keys calls');
-
-  // First send-keys: the prompt text (no Enter)
-  const textLine = sendKeysLines.find(l => l.includes('safeInstruction'));
-  assert.ok(textLine, 'Should have a send-keys call with the instruction text');
-  assert.ok(!textLine.includes('Enter'), 'Text send-keys should NOT include Enter on the same call');
-
-  // Separate send-keys for Enter
-  const enterLine = sendKeysLines.find(l => l.includes('Enter'));
-  assert.ok(enterLine, 'Should have a separate send-keys call for Enter');
+  assert.strictEqual(computeUseTUI({ ui: true }, false), true, '--ui forces TUI on');
+  assert.strictEqual(computeUseTUI({ noUi: true }, true), false, '--no-ui forces TUI off even if TTY');
+  assert.strictEqual(computeUseTUI({}, true), true, 'TTY=true with no flags enables TUI');
+  assert.strictEqual(computeUseTUI({}, false), false, 'TTY=false with no flags disables TUI');
 });

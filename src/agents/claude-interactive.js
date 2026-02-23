@@ -1,269 +1,151 @@
-import { execSync } from 'node:child_process';
-import { writeFileSync, existsSync, unlinkSync } from 'node:fs';
-import { join, basename } from 'node:path';
-import { generatePrompt } from '../prompts.js';
+import { EventEmitter } from 'node:events';
+import { writeFileSync, appendFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { query } from '@anthropic-ai/claude-agent-sdk';
 import { BaseAgent, agentState } from './base.js';
+import { generatePrompt } from '../prompts.js';
 
 /**
- * Escape a string for safe use inside double-quoted shell arguments.
+ * Module-level event emitter — TUI subscribes to this from outside.
+ * Events: 'tool:start', 'tool:done', 'subagent:start', 'subagent:done', 'session:stop'
  */
-function shellEscape(str) {
-  return str.replace(/["$`\\!]/g, '\\$&');
-}
+export const pipelineEvents = new EventEmitter();
 
 /**
  * Claude Interactive Agent
- * Runs claude or codex in an interactive tmux session
- * Ports start_interactive, run_interactive, stop_interactive from run.sh
+ * Runs claude via the Agent SDK query() API for build/fix steps.
+ * Replaces the old tmux-based interactive session approach.
  */
 export class ClaudeInteractiveAgent extends BaseAgent {
   /**
-   * Main entry point for the agent
    * @param {number} phase - Current phase number
    * @param {object} step - Step definition from workflow.yaml
    * @param {string} promptPath - Relative path to prompt file
    * @param {string} model - Model name to use (optional)
    * @param {object} context - { projectDir, config, logFile }
-   * @returns {Promise<{exitCode: number, outputPath: string|null}>}
+   * @returns {Promise<{exitCode: number, outputPath: string}>}
    */
   async run(phase, step, promptPath, model, context) {
-    const { projectDir, config } = context;
+    const { projectDir, config, logFile } = context;
     const pipelineDir = join(projectDir, '.pipeline');
-    const agent = step.agent; // 'claude-interactive' or 'codex-interactive'
+    const outputPath = join(pipelineDir, 'step-output.log');
 
-    // Generate prompt
-    const prompt = generatePrompt(projectDir, config, phase, promptPath);
-    const promptFile = join(pipelineDir, 'current-prompt.md');
-    const sentinelFile = join(pipelineDir, '.step-done');
+    const promptText = generatePrompt(projectDir, config, phase, promptPath);
+    writeFileSync(join(pipelineDir, 'current-prompt.md'), promptText, 'utf-8');
 
-    // Write prompt with sentinel instruction
-    const sentinelInstruction = `\n\n---\nWhen you have completed ALL tasks above, run this command as your FINAL action:\n\`touch ${sentinelFile}\``;
-    writeFileSync(promptFile, prompt + sentinelInstruction, 'utf-8');
-
-    // Remove any existing sentinel
-    if (existsSync(sentinelFile)) {
-      unlinkSync(sentinelFile);
+    if (agentState.interrupted) {
+      return { exitCode: 130, outputPath };
     }
 
-    try {
-      // Start interactive session
-      const sessionName = await this.startInteractive(agent, model, projectDir);
+    const controller = new AbortController();
+    const onInterrupt = () => controller.abort();
+    agentState.on('interrupt', onInterrupt);
 
-      // Deliver prompt
-      await this.deliverPrompt(promptFile, sessionName);
+    // Initialize output file
+    writeFileSync(outputPath, '', 'utf-8');
 
-      // Poll for sentinel
-      await this.pollForSentinel(sentinelFile);
-
-      // Cleanup
-      if (existsSync(sentinelFile)) {
-        unlinkSync(sentinelFile);
+    const log = (msg) => {
+      if (logFile) {
+        try { appendFileSync(logFile, msg + '\n', 'utf-8'); } catch (_) {}
       }
-      await this.sleep(1000);
+    };
 
-      // Stop session
-      await this.stopInteractive(sessionName);
+    const appendOutput = (line) => {
+      try { appendFileSync(outputPath, line + '\n', 'utf-8'); } catch (_) {}
+    };
 
-      return {
-        exitCode: 0,
-        outputPath: null
+    const outputChunks = [];
+
+    try {
+      const queryOptions = {
+        maxTurns: 500,
+        permissionMode: 'bypassPermissions',
+        env: { ...process.env, CLAUDECODE: undefined },
+        hooks: {
+          PreToolUse: [async (data) => {
+            const line = `[tool:start] ${data.tool_name} ${JSON.stringify(data.tool_input ?? {}).slice(0, 120)}`;
+            log(line);
+            appendOutput(line);
+            pipelineEvents.emit('tool:start', { phase, step: step.name, tool: data.tool_name, input: data.tool_input });
+          }],
+          PostToolUse: [async (data) => {
+            const success = !data.tool_response?.is_error;
+            const line = `[tool:done]  ${data.tool_name} ${success ? '✓' : '✗'}`;
+            log(line);
+            appendOutput(line);
+            pipelineEvents.emit('tool:done', { phase, step: step.name, tool: data.tool_name, success });
+          }],
+          SubagentStart: [async (data) => {
+            const line = `[subagent:start] ${data.agent_id}`;
+            log(line);
+            appendOutput(line);
+            pipelineEvents.emit('subagent:start', { phase, step: step.name, agentId: data.agent_id });
+          }],
+          SubagentStop: [async (data) => {
+            const line = `[subagent:done]  ${data.agent_id}`;
+            log(line);
+            appendOutput(line);
+            if (data.last_assistant_message) {
+              appendOutput(data.last_assistant_message);
+            }
+            pipelineEvents.emit('subagent:done', { phase, step: step.name, agentId: data.agent_id, output: data.last_assistant_message });
+          }],
+          Stop: [async (data) => {
+            log(`[session:stop] reason=${data.stop_reason}`);
+            pipelineEvents.emit('session:stop', { phase, step: step.name, reason: data.stop_reason });
+          }],
+        },
       };
-    } catch (error) {
-      // If interrupted or failed, still try to stop the session
-      const sessionName = basename(projectDir);
-      try {
-        await this.stopInteractive(sessionName);
-      } catch (e) {
-        // Ignore errors during cleanup
-      }
-      throw error;
-    }
-  }
 
-  /**
-   * Start an interactive Claude/Codex session in tmux
-   * Ports start_interactive from run.sh (lines 318-358)
-   * @param {string} agent - 'claude-interactive' or 'codex-interactive'
-   * @param {string} model - Model name (optional)
-   * @param {string} projectDir - Project directory path
-   * @returns {Promise<string>} The tmux session name
-   */
-  async startInteractive(agent, model, projectDir) {
-    const sessionName = basename(projectDir);
-
-    // Build command — escape values for safe shell interpolation
-    const safeDir = shellEscape(projectDir);
-    const safeModel = model ? shellEscape(model) : null;
-    let cmd;
-    if (agent === 'claude-interactive') {
-      cmd = `cd "${safeDir}" && claude --dangerously-skip-permissions`;
-      if (safeModel && safeModel !== 'default') {
-        cmd = `cd "${safeDir}" && claude --model "${safeModel}" --dangerously-skip-permissions`;
-      }
-    } else if (agent === 'codex-interactive') {
-      cmd = `cd "${safeDir}" && codex`;
-      if (safeModel && safeModel !== 'default') {
-        cmd = `cd "${safeDir}" && codex --model "${safeModel}"`;
-      }
-    } else {
-      throw new Error(`Unknown interactive agent: ${agent}`);
-    }
-
-    const safeSession = shellEscape(sessionName);
-
-    // Create tmux session if not exists
-    try {
-      execSync(`tmux has-session -t "${safeSession}" 2>/dev/null`);
-    } catch (e) {
-      execSync(`tmux new-session -d -s "${safeSession}" -c "${safeDir}"`);
-    }
-
-    // Clear CLAUDECODE env var to prevent "nested session" detection
-    // This gets set if the user previously ran Claude Code in this shell
-    // Also enable experimental agent teams feature
-    execSync(`tmux send-keys -t "${safeSession}" "unset CLAUDECODE && export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1" Enter`);
-    await this.sleep(500);
-
-    console.log(`  Starting ${agent} session in tmux...`);
-    execSync(`tmux send-keys -t "${safeSession}" "${cmd}" Enter`);
-
-    // Poll for startup - check for startup markers
-    const maxAttempts = 60;
-    const pollInterval = 2000;
-
-    for (let i = 0; i < maxAttempts; i++) {
-      // Check for interruption
-      if (agentState.isInterrupted()) {
-        throw new Error('Interrupted during startup');
+      if (model && model !== 'default') {
+        queryOptions.model = model;
       }
 
-      try {
-        const paneContent = execSync(
-          `tmux capture-pane -t "${safeSession}" -p -S -5 2>/dev/null`,
-          { encoding: 'utf-8' }
-        );
-
-        // Check for startup markers
-        if (/(bypass permissions|Welcome back|Claude Code v|Codex CLI)/.test(paneContent)) {
-          await this.sleep(3000);
-          console.log(`  ${agent} session started`);
-          return sessionName;
+      for await (const event of query({
+        prompt: promptText,
+        options: queryOptions,
+        abortController: controller,
+      })) {
+        if (event.type === 'assistant' && event.message?.role === 'assistant') {
+          for (const block of event.message.content ?? []) {
+            if (block.type === 'text') {
+              outputChunks.push(block.text);
+            }
+          }
         }
-      } catch (e) {
-        // Ignore capture errors, keep polling
+      }
+    } catch (err) {
+      agentState.off('interrupt', onInterrupt);
+
+      if (agentState.interrupted || controller.signal.aborted) {
+        appendOutput(outputChunks.join('\n'));
+        return { exitCode: 130, outputPath };
       }
 
-      await this.sleep(pollInterval);
+      const errorText = `Error: ${err.message}\n${err.stack ?? ''}`;
+      writeFileSync(outputPath, errorText, 'utf-8');
+      return { exitCode: 1, outputPath };
     }
 
-    // Capture final pane content for diagnostics
-    let finalPane = '(unable to capture)';
-    try {
-      finalPane = execSync(
-        `tmux capture-pane -t "${safeSession}" -p -S -20 2>/dev/null`,
-        { encoding: 'utf-8' }
-      );
-    } catch (e) { /* ignore */ }
-    console.error(`\n  ⚠️  Tmux pane content at timeout:\n${finalPane}`);
-    throw new Error(`${agent} failed to start after 60s`);
-  }
+    agentState.off('interrupt', onInterrupt);
 
-  /**
-   * Deliver the prompt to the interactive session via tmux.
-   * Instead of pasting the full prompt (fragile with large text),
-   * we tell Claude to read the prompt file directly by path (no @ prefix,
-   * which triggers autocomplete and causes glitchy input).
-   * @param {string} promptFile - Path to the prompt file
-   * @param {string} sessionName - Tmux session name
-   */
-  async deliverPrompt(promptFile, sessionName) {
-    const safeSession = shellEscape(sessionName);
-    const instruction = `Read and follow all instructions in ${promptFile}`;
-    const safeInstruction = shellEscape(instruction);
-    execSync(`tmux send-keys -t "${safeSession}" "${safeInstruction}"`);
-    await this.sleep(500);
-    execSync(`tmux send-keys -t "${safeSession}" Escape`);
-    await this.sleep(300);
-    execSync(`tmux send-keys -t "${safeSession}" Enter`);
-  }
-
-  /**
-   * Poll for the sentinel file that indicates step completion
-   * @param {string} sentinelFile - Path to the sentinel file
-   */
-  async pollForSentinel(sentinelFile) {
-    console.log('  Waiting for step completion...');
-
-    while (!existsSync(sentinelFile)) {
-      // Check for interruption
-      if (agentState.isInterrupted()) {
-        throw new Error('Interrupted during execution');
-      }
-
-      await this.sleep(5000);
+    // Append collected assistant text
+    if (outputChunks.length > 0) {
+      appendOutput(outputChunks.join('\n'));
     }
 
-    console.log('  Step completed');
-  }
-
-  /**
-   * Stop the interactive session
-   * Ports stop_interactive from run.sh (lines 360-375)
-   * @param {string} sessionName - Tmux session name
-   */
-  async stopInteractive(sessionName) {
-    console.log('  Stopping interactive session...');
-    const safeSession = shellEscape(sessionName);
-
-    try {
-      const paneContent = execSync(
-        `tmux capture-pane -t "${safeSession}" -p -S -3 2>/dev/null`,
-        { encoding: 'utf-8' }
-      );
-
-      // Check if already at shell prompt
-      if (/(^\$|%\s*$)/.test(paneContent)) {
-        console.log('  Session already exited');
-        return;
-      }
-    } catch (e) {
-      // If we can't capture, assume session is gone
-      console.log('  Session not found');
-      return;
+    if (agentState.interrupted) {
+      return { exitCode: 130, outputPath };
     }
 
-    // Double Ctrl-C to exit Claude Code — more reliable than /exit
-    // which gets tripped up by autocomplete dropdowns
-    execSync(`tmux send-keys -t "${safeSession}" C-c`);
-    await this.sleep(500);
-    execSync(`tmux send-keys -t "${safeSession}" C-c`);
-    await this.sleep(3000);
-
-    // Verify it actually exited
-    try {
-      const paneAfter = execSync(
-        `tmux capture-pane -t "${safeSession}" -p -S -3 2>/dev/null`,
-        { encoding: 'utf-8' }
-      );
-      if (!/(^\$|%\s*$|❯\s*$)/.test(paneAfter)) {
-        // Still in Claude — hit it again
-        execSync(`tmux send-keys -t "${safeSession}" C-c`);
-        await this.sleep(500);
-        execSync(`tmux send-keys -t "${safeSession}" C-c`);
-        await this.sleep(3000);
-      }
-    } catch (e) {
-      // Ignore — best effort
-    }
-
-    console.log('  Session stopped');
+    return { exitCode: 0, outputPath };
   }
+}
 
-  /**
-   * Sleep utility
-   * @param {number} ms - Milliseconds to sleep
-   */
-  sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
+/**
+ * Factory function for engine.js
+ * @returns {ClaudeInteractiveAgent}
+ */
+export function createAgent() {
+  return new ClaudeInteractiveAgent();
 }

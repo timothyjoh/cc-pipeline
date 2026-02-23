@@ -23,11 +23,15 @@ Usage:
 Run options:
   --phases <n>    Number of phases to run (default: unlimited)
   --model <name>  Override model for this run
+  --ui            Launch Ink TUI (default: auto-detect TTY)
+  --no-ui         Force plain output (for CI/pipes)
 
 Examples:
   npx cc-pipeline init
   npx cc-pipeline update
   npx cc-pipeline run --phases 3
+  npx cc-pipeline run --ui
+  npx cc-pipeline run --no-ui
   npx cc-pipeline status
   npx cc-pipeline reset
 `.trim();
@@ -51,9 +55,15 @@ export async function run(args) {
     case 'init':
       await init(process.cwd(), options);
       break;
-    case 'run':
+    case 'run': {
+      const useTUI = options.ui ?? (options.noUi ? false : process.stdout.isTTY);
+      if (useTUI) {
+        const { launchTUI } = await import('./tui/index.js');
+        launchTUI();
+      }
       await runPipeline(process.cwd(), options);
       break;
+    }
     case 'status':
       status(process.cwd());
       break;
@@ -77,6 +87,10 @@ function parseOptions(args) {
       opts.phases = parseInt(args[++i], 10);
     } else if (args[i] === '--model' && args[i + 1]) {
       opts.model = args[++i];
+    } else if (args[i] === '--ui') {
+      opts.ui = true;
+    } else if (args[i] === '--no-ui') {
+      opts.noUi = true;
     }
   }
   return opts;
