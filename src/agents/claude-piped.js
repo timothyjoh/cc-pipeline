@@ -1,14 +1,12 @@
-import { spawn } from 'node:child_process';
-import { createWriteStream, writeFileSync } from 'node:fs';
+import { writeFileSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { query } from '@anthropic-ai/claude-agent-sdk';
 import { BaseAgent, agentState } from './base.js';
 import { generatePrompt } from '../prompts.js';
 
 /**
  * Claude Piped Agent
- * Runs `claude -p` with a generated prompt for spec, research, plan, review, reflect steps
- *
- * Port of run_claude_piped from run.sh lines 272-291
+ * Runs claude via the Agent SDK query() API for spec, research, plan, review, reflect steps
  */
 export class ClaudePipedAgent extends BaseAgent {
   /**
@@ -20,55 +18,95 @@ export class ClaudePipedAgent extends BaseAgent {
    * @returns {Promise<{exitCode: number, outputPath: string}>}
    */
   async run(phase, step, promptPath, model, context) {
-    const { projectDir, config } = context;
+    const { projectDir, config, logFile } = context;
     const pipelineDir = join(projectDir, '.pipeline');
+    const outputPath = join(pipelineDir, 'step-output.log');
 
     // Generate prompt with substitutions
-    const prompt = generatePrompt(projectDir, config, phase, promptPath);
+    const promptText = generatePrompt(projectDir, config, phase, promptPath);
 
-    // Write prompt to current-prompt.md
+    // Write prompt to current-prompt.md for inspection
     const promptFile = join(pipelineDir, 'current-prompt.md');
-    writeFileSync(promptFile, prompt, 'utf-8');
+    writeFileSync(promptFile, promptText, 'utf-8');
 
-    // Build command arguments
-    const args = ['-p', '--dangerously-skip-permissions'];
-    if (model && model !== 'default') {
-      args.push('--model', model);
+    // Check interrupt before starting
+    if (agentState.interrupted) {
+      return { exitCode: 130, outputPath };
     }
 
-    // Output path
-    const outputPath = join(pipelineDir, 'step-output.log');
-    const outputStream = createWriteStream(outputPath, { flags: 'w' });
+    const controller = new AbortController();
+    const onInterrupt = () => controller.abort();
+    agentState.on('interrupt', onInterrupt);
 
-    // Spawn claude process — pipe prompt via stdin to avoid OS arg length limits
-    const child = spawn('claude', args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: projectDir
-    });
+    const log = (msg) => {
+      if (logFile) {
+        try { appendFileSync(logFile, msg + '\n', 'utf-8'); } catch (_) {}
+      }
+    };
 
-    // Write prompt to stdin
-    child.stdin.write(prompt);
-    child.stdin.end();
+    const outputChunks = [];
 
-    // Pipe stdout and stderr to output file (2>&1 equivalent)
-    child.stdout.pipe(outputStream);
-    child.stderr.pipe(outputStream);
+    try {
+      const queryOptions = {
+        maxTurns: 200,
+        permissionMode: 'bypassPermissions',
+        // CRITICAL: unset CLAUDECODE to prevent SDK conflict when running inside Claude Code
+        env: { ...process.env, CLAUDECODE: undefined },
+        hooks: {
+          SubagentStart: [async (data) => {
+            log(`[sdk] subagent_start agent_id=${data.agent_id ?? ''}`);
+          }],
+          SubagentStop: [async (data) => {
+            const msg = data.last_assistant_message ?? '';
+            log(`[sdk] subagent_stop agent_id=${data.agent_id ?? ''} msg=${msg.substring(0, 120)}`);
+          }],
+          PostToolUse: [async (data) => {
+            const name = data.tool_name ?? '';
+            const dur = data.duration_ms != null ? ` ${data.duration_ms}ms` : '';
+            log(`[sdk] tool_use tool=${name}${dur}`);
+          }],
+        },
+      };
 
-    // Register with AgentState for signal handling
-    agentState.setChild(child);
+      if (model && model !== 'default') {
+        queryOptions.model = model;
+      }
 
-    // Wait for completion — use 'close' to ensure stdio streams are fully flushed
-    const exitCode = await new Promise((resolve) => {
-      child.on('close', (code) => {
-        resolve(code ?? 1);
-      });
-    });
+      for await (const event of query({
+        prompt: promptText,
+        options: queryOptions,
+        abortController: controller,
+      })) {
+        if (event.type === 'assistant' && event.message?.role === 'assistant') {
+          for (const block of event.message.content ?? []) {
+            if (block.type === 'text') {
+              outputChunks.push(block.text);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      agentState.off('interrupt', onInterrupt);
 
-    // Clean up
-    agentState.clearChild();
-    outputStream.end();
+      if (agentState.interrupted || controller.signal.aborted) {
+        writeFileSync(outputPath, outputChunks.join('\n'), 'utf-8');
+        return { exitCode: 130, outputPath };
+      }
 
-    return { exitCode, outputPath };
+      const errorText = `Error: ${err.message}\n${err.stack ?? ''}`;
+      writeFileSync(outputPath, errorText, 'utf-8');
+      return { exitCode: 1, outputPath };
+    }
+
+    agentState.off('interrupt', onInterrupt);
+
+    writeFileSync(outputPath, outputChunks.join('\n'), 'utf-8');
+
+    if (agentState.interrupted) {
+      return { exitCode: 130, outputPath };
+    }
+
+    return { exitCode: 0, outputPath };
   }
 }
 
