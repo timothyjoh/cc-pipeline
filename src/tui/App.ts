@@ -59,20 +59,23 @@ function loadPhaseDescription(projectDir: string, phasesDir: string, phase: stri
   return '';
 }
 
-function extractDetail(tool: string, input: unknown): string {
+function extractDetail(tool: string, input: unknown, projectDir: string): string {
   if (!input || typeof input !== 'object') return '';
   const inp = input as Record<string, unknown>;
+  const rel = (p: string) => p.startsWith(projectDir)
+    ? p.slice(projectDir.length).replace(/^\//, '')
+    : p;
   switch (tool) {
     case 'Read':
     case 'Write':
     case 'Edit':
-      return String(inp.file_path ?? inp.notebook_path ?? '');
+      return rel(String(inp.file_path ?? inp.notebook_path ?? ''));
     case 'Bash':
       return String(inp.command ?? '').replace(/\n/g, ' ').slice(0, 80);
     case 'Glob':
       return String(inp.pattern ?? '');
     case 'Grep':
-      return String(inp.pattern ?? '') + (inp.path ? `  ${inp.path}` : '');
+      return String(inp.pattern ?? '') + (inp.path ? `  ${rel(String(inp.path))}` : '');
     case 'WebFetch':
       return String(inp.url ?? '').slice(0, 60);
     case 'WebSearch':
@@ -151,7 +154,7 @@ export function App({ events, projectDir }: AppProps) {
                 const tool = m[1];
                 let input: unknown = {};
                 try { input = JSON.parse(m[2]); } catch (_) {}
-                const detail = extractDetail(tool, input);
+                const detail = extractDetail(tool, input, projectDir);
                 updated = [...updated.slice(-29), { id: nextId++, kind: 'tool', tool, detail, pending: true }];
               }
             } else if (line.startsWith('[tool:done]')) {
@@ -219,7 +222,11 @@ export function App({ events, projectDir }: AppProps) {
       }
     };
     const onStop = (d: any) => {
-      setStatus(d.reason === 'end_turn' ? 'done' : 'error');
+      // Only flag an error state — do not exit. The pipeline may have more phases.
+      if (d.reason && d.reason !== 'end_turn') setStatus('error');
+    };
+    const onPipelineExit = () => {
+      setStatus(prev => prev === 'error' ? 'error' : 'done');
       setTimeout(exit, 500);
     };
     const onLog = (d: any) => {
@@ -229,12 +236,14 @@ export function App({ events, projectDir }: AppProps) {
     events.on('step:start', onStepStart);
     events.on('step:done', onStepDone);
     events.on('session:stop', onStop);
+    events.on('pipeline:exit', onPipelineExit);
     events.on('pipeline:log', onLog);
 
     return () => {
       events.off('step:start', onStepStart);
       events.off('step:done', onStepDone);
       events.off('session:stop', onStop);
+      events.off('pipeline:exit', onPipelineExit);
       events.off('pipeline:log', onLog);
     };
   }, []);
@@ -299,7 +308,7 @@ export function App({ events, projectDir }: AppProps) {
         ...(log.length === 0 && textLines.length === 0 && currentStep
           ? [React.createElement(Text, { key: 'pulse', dimColor: true }, 'processing' + '.'.repeat((elapsed % 4) + 1))]
           : log.length > 0
-          ? log.map(entry => {
+          ? log.slice(-10).map(entry => {
               const icon = entry.pending ? '·' : entry.success ? '✓' : '✗';
               const iconColor = entry.pending ? undefined : entry.success ? 'green' : 'red';
               if (entry.kind === 'subagent') {
@@ -318,7 +327,7 @@ export function App({ events, projectDir }: AppProps) {
                 React.createElement(Text, { color: 'cyan' }, entry.detail)
               );
             })
-          : textLines.slice(-5).map(line =>
+          : textLines.slice(-10).map(line =>
               React.createElement(Text, { key: line.id, dimColor: true, wrap: 'truncate' }, line.text)
             )
         )
