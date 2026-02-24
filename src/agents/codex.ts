@@ -27,21 +27,21 @@ export class CodexAgent extends BaseAgent {
       return { exitCode: 130, outputPath };
     }
 
-    // Build args: always --yolo, optionally --model
-    const args = ['--yolo'];
+    // Build args: exec subcommand, always --yolo, optionally --model
+    const args = ['exec', '--yolo'];
     if (model && model !== 'default') {
       args.push('--model', model);
     }
     // Prompt passed as final positional arg (spawn avoids shell-escaping issues)
     args.push(promptText);
 
-    const header = `$ codex ${args.slice(0, model && model !== 'default' ? 3 : 1).join(' ')} "<prompt>"\n`;
+    const header = `$ codex exec --yolo${model && model !== 'default' ? ` --model ${model}` : ''} "<prompt>"\n`;
     writeFileSync(outputPath, header, 'utf-8');
 
     return new Promise((resolve) => {
       const child = spawn('codex', args, {
         shell: false,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['inherit', 'pipe', 'pipe'],
         cwd: projectDir,
       });
 

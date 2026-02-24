@@ -152,13 +152,46 @@ test('CodexAgent: always uses shell:false (no shell escaping)', async () => {
   assert.ok(source.includes('shell: false'), 'codex agent must use shell:false to avoid prompt escaping issues');
 });
 
-test('CodexAgent: --yolo flag always present in args', async () => {
+test('CodexAgent: uses exec subcommand with --yolo flag', async () => {
   const { readFileSync: readFS } = await import('node:fs');
   const { join: pathJoin, dirname } = await import('node:path');
   const { fileURLToPath } = await import('node:url');
   const __dir = dirname(fileURLToPath(import.meta.url));
   const source = readFS(pathJoin(__dir, 'agents', 'codex.ts'), 'utf8');
+  assert.ok(source.includes("'exec'"), 'codex agent must use exec subcommand');
   assert.ok(source.includes("'--yolo'"), 'codex agent must always pass --yolo');
+});
+
+test('CodexAgent: stdin is inherit so codex sees a TTY', async () => {
+  if (typeof mock.module !== 'function') return;
+
+  const projectDir = setupTempProject();
+
+  let capturedOpts: any = null;
+  mock.module('node:child_process', {
+    namedExports: {
+      spawn: (_cmd: string, _args: string[], opts: any) => {
+        capturedOpts = opts;
+        const { EventEmitter } = require('node:events');
+        const child = new EventEmitter() as any;
+        child.stdout = new EventEmitter();
+        child.stderr = new EventEmitter();
+        child.pid = 99;
+        setImmediate(() => child.emit('close', 0));
+        return child;
+      },
+    },
+  });
+
+  const { CodexAgent } = await import('./agents/codex.js');
+  const agent = new CodexAgent();
+  await agent.run(PHASE, STEP, PROMPT_PATH, 'default', makeContext(projectDir));
+
+  assert.strictEqual(capturedOpts?.stdio[0], 'inherit',
+    'stdin must be inherit so codex detects a TTY and does not error');
+
+  mock.restoreAll();
+  rmSync(projectDir, { recursive: true, force: true });
 });
 
 test('CodexAgent: createAgent() returns a CodexAgent instance', async () => {
