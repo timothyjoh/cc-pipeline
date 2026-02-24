@@ -266,7 +266,7 @@ async function runStep(
     agent,
     model,
   });
-  pipelineEvents.emit('step:start', { phase, step: stepName, agent });
+  pipelineEvents.emit('step:start', { phase, step: stepName, agent, model });
 
   console.log(`\nRunning step: ${stepName} (phase ${phase}, agent: ${agent})`);
 

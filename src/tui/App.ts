@@ -93,6 +93,8 @@ export function App({ events, projectDir }: AppProps) {
   const stepDescriptions = new Map(stepInfo.map(s => [s.name, s.description]));
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
   const [currentStep, setCurrentStep] = useState('');
+  const [currentAgent, setCurrentAgent] = useState('');
+  const [currentModel, setCurrentModel] = useState('');
   const [currentPhase, setCurrentPhase] = useState('');
   const [phaseDescription, setPhaseDescription] = useState('');
   const [log, setLog] = useState<LogEntry[]>([]);
@@ -198,6 +200,8 @@ export function App({ events, projectDir }: AppProps) {
     const onStepStart = (d: any) => {
       setCurrentPhase(String(d.phase));
       setCurrentStep(d.step);
+      setCurrentAgent(d.agent ?? '');
+      setCurrentModel(d.model ?? '');
       setTextLines([]);
       fileOffsetRef.current = 0;
       const initialLog: LogEntry[] = d.agent && d.agent !== 'bash'
@@ -265,10 +269,13 @@ export function App({ events, projectDir }: AppProps) {
           const isDone = completedSteps.has(name);
           const isCurrent = currentStep === name;
           const prefix = isDone ? '✓ ' : isCurrent ? '▶ ' : '  ';
+          const agentLabel = isCurrent && currentAgent
+            ? ` - ${currentAgent} (${!currentModel || currentModel === 'default' ? 'default' : currentModel})`
+            : '';
           return React.createElement(
             Text,
             { key: i, color: isCurrent ? 'green' : undefined, bold: isCurrent, dimColor: !isCurrent && !isDone },
-            prefix + name
+            prefix + name + agentLabel
           );
         })
       ),
