@@ -53,7 +53,7 @@ export async function update(projectDir: string) {
     console.log('  ⚠️  Could not fetch frontend-design skill (offline?) — skipping');
   }
 
-  // Patch workflow.yaml: update the commit step command and continue_on_error
+  // Patch workflow.yaml: migrate the commit step to claudecode agent + prompt
   // without touching any other customizations.
   const workflowPath = join(pipelineDir, 'workflow.yaml');
   if (existsSync(workflowPath)) {
@@ -61,16 +61,17 @@ export async function update(projectDir: string) {
       const doc = YAML.parseDocument(readFileSync(workflowPath, 'utf-8'));
       const steps = doc.get('steps') as YAML.YAMLSeq | undefined;
       if (steps) {
-        const COMMIT_CMD = "git rev-parse --git-dir > /dev/null 2>&1 || git init && git add -A && git commit -m 'Phase {{PHASE}} complete' || true && git push origin HEAD 2>/dev/null || true";
         for (const step of steps.items as YAML.YAMLMap[]) {
           if (step.get('name') === 'commit') {
+            step.set('agent', 'claudecode');
+            step.set('prompt', 'prompts/commit.md');
             step.set('continue_on_error', true);
-            step.set('command', COMMIT_CMD);
+            step.delete('command');
           }
         }
       }
       writeFileSync(workflowPath, doc.toString(), 'utf-8');
-      console.log('  ✅ Patched .pipeline/workflow.yaml commit step (continue_on_error + safe push)');
+      console.log('  ✅ Patched .pipeline/workflow.yaml commit step (claudecode agent + prompt)');
     } catch (e) {
       console.log('  ⚠️  Could not patch workflow.yaml — update it manually if needed');
     }

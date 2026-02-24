@@ -72,9 +72,9 @@ steps:
 
   - name: commit
     description: "Git commit + push"
-    agent: bash
+    agent: claudecode
+    prompt: prompts/commit.md
     continue_on_error: true
-    command: "git rev-parse --git-dir > /dev/null 2>&1 || git init && git add -A && git commit -m 'Phase {{PHASE}} complete' || true && git push origin HEAD 2>/dev/null || true"
 
 # Usage tracking
 usage_check:
