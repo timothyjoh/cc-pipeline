@@ -178,8 +178,9 @@ export function App({ events, projectDir }: AppProps) {
             } else if (line.startsWith('[text] ')) {
               newTextLines.push({ id: nextId++, text: line.slice(7) });
             } else {
-              // Raw bash output — show as-is
-              newTextLines.push({ id: nextId++, text: line });
+              // Raw stdout (bash/codex) — strip ANSI escape codes before display
+              const clean = line.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').trim();
+              if (clean) newTextLines.push({ id: nextId++, text: clean });
             }
           }
 
@@ -317,7 +318,7 @@ export function App({ events, projectDir }: AppProps) {
                 React.createElement(Text, { color: 'cyan' }, entry.detail)
               );
             })
-          : textLines.map(line =>
+          : textLines.slice(-5).map(line =>
               React.createElement(Text, { key: line.id, dimColor: true, wrap: 'truncate' }, line.text)
             )
         )
