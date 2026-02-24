@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
  */
 
 // Helper: build a minimal async generator from an array of events
-async function* eventsFrom(events) {
+async function* eventsFrom(events: any[]) {
   for (const e of events) yield e;
 }
 
@@ -23,7 +23,7 @@ function setupTempProject() {
   return projectDir;
 }
 
-function makeContext(projectDir) {
+function makeContext(projectDir: string) {
   return {
     projectDir,
     config: { project: { name: 'test' }, workflow: { steps: [] } },
@@ -52,7 +52,7 @@ test('ClaudePipedAgent: exitCode 0 on success, writes assistant text to outputPa
 
   mock.module('@anthropic-ai/claude-agent-sdk', {
     namedExports: {
-      query: (_opts) => eventsFrom([ASSISTANT_EVENT]),
+      query: (_opts: any) => eventsFrom([ASSISTANT_EVENT]),
     },
   });
 
@@ -61,8 +61,8 @@ test('ClaudePipedAgent: exitCode 0 on success, writes assistant text to outputPa
   const result = await agent.run(PHASE, STEP, PROMPT_PATH, 'default', makeContext(projectDir));
 
   assert.strictEqual(result.exitCode, 0);
-  assert.ok(existsSync(result.outputPath), 'outputPath file should exist');
-  const output = readFileSync(result.outputPath, 'utf-8');
+  assert.ok(existsSync(result.outputPath!), 'outputPath file should exist');
+  const output = readFileSync(result.outputPath!, 'utf-8');
   assert.ok(output.includes('Here is the spec.'), 'output should contain assistant text');
 
   mock.restoreAll();
@@ -91,8 +91,8 @@ test('ClaudePipedAgent: exitCode 1 on thrown error, writes error to outputPath',
   const result = await agent.run(PHASE, STEP, PROMPT_PATH, 'claude-sonnet-4-5', makeContext(projectDir));
 
   assert.strictEqual(result.exitCode, 1);
-  assert.ok(existsSync(result.outputPath), 'outputPath file should exist on error');
-  const output = readFileSync(result.outputPath, 'utf-8');
+  assert.ok(existsSync(result.outputPath!), 'outputPath file should exist on error');
+  const output = readFileSync(result.outputPath!, 'utf-8');
   assert.ok(output.includes('API failure'), 'error message should be written to output');
 
   mock.restoreAll();
@@ -135,10 +135,10 @@ test('ClaudePipedAgent: model not passed when model === "default"', async () => 
 
   const projectDir = setupTempProject();
 
-  let capturedOptions = null;
+  let capturedOptions: any = null;
   mock.module('@anthropic-ai/claude-agent-sdk', {
     namedExports: {
-      query: async function* ({ options }) {
+      query: async function* ({ options }: any) {
         capturedOptions = options;
         yield ASSISTANT_EVENT;
       },
@@ -163,10 +163,10 @@ test('ClaudePipedAgent: model passed when model is a real identifier', async () 
 
   const projectDir = setupTempProject();
 
-  let capturedOptions = null;
+  let capturedOptions: any = null;
   mock.module('@anthropic-ai/claude-agent-sdk', {
     namedExports: {
-      query: async function* ({ options }) {
+      query: async function* ({ options }: any) {
         capturedOptions = options;
         yield ASSISTANT_EVENT;
       },
@@ -187,4 +187,57 @@ test('ClaudePipedAgent: createAgent() returns a ClaudePipedAgent instance', asyn
   const { ClaudePipedAgent, createAgent } = await import('./agents/claude-piped.js');
   const agent = createAgent();
   assert.ok(agent instanceof ClaudePipedAgent, 'createAgent should return a ClaudePipedAgent');
+});
+
+test('ClaudePipedAgent: pipelineEvents imported from events.ts (not claude-interactive)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { join: pathJoin, dirname } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const __dir = dirname(fileURLToPath(import.meta.url));
+  const source = readFileSync(pathJoin(__dir, 'agents', 'claude-piped.ts'), 'utf8');
+  assert.ok(source.includes("from '../events.js'"), 'claude-piped should import from events.js');
+  assert.ok(!source.includes("from './claude-interactive.js'"), 'should not import from claude-interactive');
+});
+
+test('ClaudePipedAgent: pipelineEvents emits tool:start on hook fire', async () => {
+  if (typeof mock.module !== 'function') return;
+
+  const projectDir = setupTempProject();
+
+  let capturedHooks: any = null;
+  mock.module('@anthropic-ai/claude-agent-sdk', {
+    namedExports: {
+      query: async function* ({ options }: any) {
+        capturedHooks = options.hooks;
+        await capturedHooks.PreToolUse[0]({ tool_name: 'Glob', tool_input: { pattern: '*.ts' } });
+        await capturedHooks.PostToolUse[0]({ tool_name: 'Glob', tool_response: { is_error: false } });
+        yield {
+          type: 'assistant',
+          message: { role: 'assistant', content: [{ type: 'text', text: 'done' }] },
+        };
+      },
+    },
+  });
+
+  const { ClaudePipedAgent } = await import('./agents/claude-piped.js');
+  const { pipelineEvents } = await import('./events.js');
+
+  const startEvents: any[] = [];
+  const doneEvents: any[] = [];
+  pipelineEvents.on('tool:start', (d: any) => startEvents.push(d));
+  pipelineEvents.on('tool:done', (d: any) => doneEvents.push(d));
+
+  const agent = new ClaudePipedAgent();
+  await agent.run(1, { name: 'spec', agent: 'claude-piped' } as any, 'prompts/spec.md', 'default', makeContext(projectDir));
+
+  pipelineEvents.removeAllListeners('tool:start');
+  pipelineEvents.removeAllListeners('tool:done');
+
+  assert.strictEqual(startEvents.length, 1);
+  assert.strictEqual(startEvents[0].tool, 'Glob');
+  assert.strictEqual(doneEvents.length, 1);
+  assert.strictEqual(doneEvents[0].success, true);
+
+  mock.restoreAll();
+  rmSync(projectDir, { recursive: true, force: true });
 });

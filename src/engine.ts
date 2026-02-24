@@ -7,6 +7,7 @@ import { agentState } from './agents/base.js';
 import { BashAgent } from './agents/bash.js';
 import { ClaudePipedAgent } from './agents/claude-piped.js';
 import { ClaudeInteractiveAgent } from './agents/claude-interactive.js';
+import { pipelineEvents } from './events.js';
 
 const MAX_PHASES = 20;
 
@@ -21,11 +22,8 @@ const MAX_PHASES = 20;
  * - Check for PROJECT COMPLETE in reflections
  * - Handle phase limits and MAX_PHASES
  * - Signal handling for clean shutdown
- *
- * @param {string} projectDir - Absolute path to project root
- * @param {object} options - { phases?: number, model?: string }
  */
-export async function runEngine(projectDir, options = {}) {
+export async function runEngine(projectDir: string, options: any = {}) {
   const pipelineDir = join(projectDir, '.pipeline');
   const logFile = join(pipelineDir, 'pipeline.jsonl');
   const workflowFile = join(pipelineDir, 'workflow.yaml');
@@ -48,11 +46,11 @@ export async function runEngine(projectDir, options = {}) {
 
   // Signal handling — track interrupted state, kill child processes, and allow cancelling sleep
   let interrupted = false;
-  let cancelSleep = null;
+  let cancelSleep: (() => void) | null = null;
   let phase = resumePoint.phase;
   let currentStepName = resumePoint.stepName;
 
-  const handleSignal = (signal) => {
+  const handleSignal = (signal: string) => {
     if (interrupted) return; // Already handling a signal, ignore duplicates
     console.log(`\nReceived ${signal}, shutting down gracefully...`);
     interrupted = true;
@@ -119,8 +117,10 @@ export async function runEngine(projectDir, options = {}) {
         }
       }
 
+      pipelineEvents.emit('phase:start', { phase });
+
       // Execute all steps in phase
-      let stepIndex = config.steps.findIndex(s => s.name === currentStepName);
+      let stepIndex = config.steps.findIndex((s: any) => s.name === currentStepName);
       if (stepIndex === -1) stepIndex = 0;
 
       for (let i = stepIndex; i < config.steps.length; i++) {
@@ -139,8 +139,8 @@ export async function runEngine(projectDir, options = {}) {
         for (let attempt = 0; attempt < retryDelays.length; attempt++) {
           if (attempt > 0) {
             const delaySec = retryDelays[attempt] / 1000;
-            console.log(`\n  ⏳ Retry ${attempt}/2 for step "${stepDef.name}" in ${delaySec}s...`);
-            await new Promise(resolve => {
+            console.log(`\n  Retry ${attempt}/2 for step "${stepDef.name}" in ${delaySec}s...`);
+            await new Promise<void>(resolve => {
               const timer = setTimeout(resolve, retryDelays[attempt]);
               cancelSleep = () => { clearTimeout(timer); resolve(); };
             });
@@ -168,7 +168,7 @@ export async function runEngine(projectDir, options = {}) {
 
         // If still failed after all retries, stop the pipeline
         if (lastResult === 'error') {
-          console.error(`\n  ❌ Step "${stepDef.name}" failed after 3 attempts. Pipeline stopped.`);
+          console.error(`\n  Step "${stepDef.name}" failed after 3 attempts. Pipeline stopped.`);
           console.error(`  Run \`cc-pipeline run\` to retry from this step.`);
           appendEvent(logFile, {
             event: 'pipeline_stopped',
@@ -182,6 +182,7 @@ export async function runEngine(projectDir, options = {}) {
 
       // Phase complete
       appendEvent(logFile, { event: 'phase_complete', phase });
+      pipelineEvents.emit('phase:done', { phase });
 
       phasesRun++;
 
@@ -196,7 +197,7 @@ export async function runEngine(projectDir, options = {}) {
       currentStepName = config.steps[0].name;
 
       // Brief pause between phases (interruptible)
-      await new Promise(resolve => {
+      await new Promise<void>(resolve => {
         const timer = setTimeout(resolve, 5000);
         cancelSleep = () => { clearTimeout(timer); resolve(); };
       });
@@ -215,14 +216,8 @@ export async function runEngine(projectDir, options = {}) {
 
 /**
  * Execute a single pipeline step.
- *
- * @param {number} phase - Current phase number
- * @param {object} stepDef - Step definition from workflow.yaml
- * @param {string} projectDir - Project root directory
- * @param {object} config - Full config object
- * @param {string} logFile - Path to JSONL log
  */
-async function runStep(phase, stepDef, projectDir, config, logFile, options = {}) {
+async function runStep(phase: number, stepDef: any, projectDir: string, config: any, logFile: string, options: any = {}) {
   const { name: stepName, agent, skipUnless, output, testGate } = stepDef;
 
   // Check skipUnless condition
@@ -249,11 +244,12 @@ async function runStep(phase, stepDef, projectDir, config, logFile, options = {}
     agent,
     model,
   });
+  pipelineEvents.emit('step:start', { phase, step: stepName, agent });
 
   console.log(`\nRunning step: ${stepName} (phase ${phase}, agent: ${agent})`);
 
   // Route to agent and execute
-  let result;
+  let result: any;
   const context = { projectDir, config, logFile };
   const promptPath = stepDef.prompt || null;
 
@@ -278,7 +274,7 @@ async function runStep(phase, stepDef, projectDir, config, logFile, options = {}
       default:
         throw new Error(`Unknown agent: ${agent}`);
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error(`Error executing agent ${agent}: ${err.message}`);
     result = { exitCode: 1, outputPath: null, error: err.message };
   }
@@ -301,6 +297,7 @@ async function runStep(phase, stepDef, projectDir, config, logFile, options = {}
     exitCode: result.exitCode,
     ...(result.error && { error: result.error }),
   });
+  pipelineEvents.emit('step:done', { phase, step: stepName, agent, exitCode: result.exitCode });
 
   // Validate output if specified
   if (output) {
@@ -330,4 +327,3 @@ async function runStep(phase, stepDef, projectDir, config, logFile, options = {}
 
   return status;
 }
-

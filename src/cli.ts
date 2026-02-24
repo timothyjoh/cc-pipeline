@@ -36,7 +36,7 @@ Examples:
   npx cc-pipeline reset
 `.trim();
 
-export async function run(args) {
+export async function run(args: string[]) {
   const command = args[0];
 
   if (command === '--version' || command === '-v' || command === 'version') {
@@ -59,7 +59,7 @@ export async function run(args) {
       const useTUI = options.ui ?? (options.noUi ? false : process.stdout.isTTY);
       if (useTUI) {
         const { launchTUI } = await import('./tui/index.js');
-        launchTUI();
+        launchTUI(process.cwd());
       }
       await runPipeline(process.cwd(), options);
       break;
@@ -80,8 +80,8 @@ export async function run(args) {
   }
 }
 
-function parseOptions(args) {
-  const opts = {};
+export function parseOptions(args: string[]): Record<string, any> {
+  const opts: Record<string, any> = {};
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--phases' && args[i + 1]) {
       opts.phases = parseInt(args[++i], 10);
@@ -94,4 +94,13 @@ function parseOptions(args) {
     }
   }
   return opts;
+}
+
+// Bootstrap: auto-invoke when run as a script
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+if (isMain) {
+  run(process.argv.slice(2)).catch(err => {
+    console.error(err.message);
+    process.exit(1);
+  });
 }

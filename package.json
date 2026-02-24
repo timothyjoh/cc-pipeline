@@ -7,7 +7,9 @@
     "cc-pipeline": "bin/cc-pipeline.js"
   },
   "scripts": {
-    "test": "node --test src/**/*.test.js"
+    "start": "tsx src/cli.ts",
+    "test": "node --import tsx/esm --test 'src/**/*.test.ts'",
+    "build": "tsc"
   },
   "repository": {
     "type": "git",
