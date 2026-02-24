@@ -41,17 +41,25 @@ test('signal handling: SIGINT causes clean exit with interrupted event', async (
     let stdout = '';
     let stderr = '';
 
-    child.stdout.on('data', (data) => {
-      stdout += data.toString();
+    // Wait for "Running step:" in stdout before sending SIGINT — this guarantees
+    // the engine's SIGINT handler is registered and the step is actually executing,
+    // so the interrupted event will be written when we signal.
+    const engineStarted = new Promise<void>((resolve) => {
+      child.stdout.on('data', (data: Buffer) => {
+        stdout += data.toString();
+        if (stdout.includes('Running step:')) resolve();
+      });
     });
 
-    child.stderr.on('data', (data) => {
+    child.stderr.on('data', (data: Buffer) => {
       stderr += data.toString();
     });
 
-    // Wait for the process to start, then send SIGINT
-    // tsx adds startup overhead (extra node → tsx → cli hop), use 2000ms
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    // Wait for the engine to start (or 8 seconds max — handles slow tsx startup)
+    await Promise.race([
+      engineStarted,
+      new Promise((resolve) => setTimeout(resolve, 8000)),
+    ]);
 
     // Send SIGINT
     child.kill('SIGINT');
@@ -142,8 +150,17 @@ test('signal handling: process exits within timeout after SIGINT', async () => {
       stdio: 'pipe',
     });
 
-    // Wait for startup — tsx adds overhead (node → tsx → cli), use 2000ms
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    let sigStdout = '';
+    // Wait for "Running step:" so the engine is definitely up before we signal
+    const sigEngineStarted = new Promise<void>((resolve) => {
+      child.stdout.on('data', (data: Buffer) => {
+        sigStdout += data.toString();
+        if (sigStdout.includes('Running step:')) resolve();
+      });
+    });
+    child.stderr.on('data', () => {});
+
+    await Promise.race([sigEngineStarted, new Promise((resolve) => setTimeout(resolve, 8000))]);
 
     // Send SIGINT
     const signalTime = Date.now();
