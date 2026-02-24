@@ -313,7 +313,7 @@ export function App({ events, projectDir }: AppProps) {
         ...(log.length === 0 && textLines.length === 0 && currentStep
           ? [React.createElement(Text, { key: 'pulse', dimColor: true }, 'processing' + '.'.repeat((elapsed % 4) + 1))]
           : log.length > 0
-          ? log.slice(-10).map(entry => {
+          ? log.slice(-7).map(entry => {
               const icon = entry.pending ? '·' : entry.success ? '✓' : '✗';
               const iconColor = entry.pending ? undefined : entry.success ? 'green' : 'red';
               if (entry.kind === 'subagent') {
@@ -332,7 +332,7 @@ export function App({ events, projectDir }: AppProps) {
                 React.createElement(Text, { color: 'cyan' }, entry.detail)
               );
             })
-          : textLines.slice(-10).map(line =>
+          : textLines.slice(-7).map(line =>
               React.createElement(Text, { key: line.id, dimColor: true, wrap: 'truncate' }, line.text)
             )
         )
