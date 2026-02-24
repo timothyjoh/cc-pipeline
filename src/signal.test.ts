@@ -167,7 +167,7 @@ test('signal handling: process exits within timeout after SIGINT', async () => {
     child.kill('SIGINT');
 
     // Wait for exit
-    const exitTime = await new Promise((resolve) => {
+    const exitTime = await new Promise<number>((resolve) => {
       child.on('exit', () => {
         resolve(Date.now());
       });

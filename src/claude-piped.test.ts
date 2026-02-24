@@ -199,18 +199,18 @@ test('ClaudePipedAgent: pipelineEvents imported from events.ts (not claude-inter
   assert.ok(!source.includes("from './claude-interactive.js'"), 'should not import from claude-interactive');
 });
 
-test('ClaudePipedAgent: pipelineEvents emits tool:start on hook fire', async () => {
+test('ClaudePipedAgent: hooks write tool:start and tool:done to output file', async () => {
   if (typeof mock.module !== 'function') return;
 
   const projectDir = setupTempProject();
 
-  let capturedHooks: any = null;
   mock.module('@anthropic-ai/claude-agent-sdk', {
     namedExports: {
       query: async function* ({ options }: any) {
-        capturedHooks = options.hooks;
-        await capturedHooks.PreToolUse[0]({ tool_name: 'Glob', tool_input: { pattern: '*.ts' } });
-        await capturedHooks.PostToolUse[0]({ tool_name: 'Glob', tool_response: { is_error: false } });
+        const hooks = options.hooks;
+        // New format: HookCallbackMatcher[] — each element is { hooks: [fn] }
+        await hooks.PreToolUse[0].hooks[0]({ tool_name: 'Glob', tool_input: { pattern: '*.ts' } });
+        await hooks.PostToolUse[0].hooks[0]({ tool_name: 'Glob', tool_response: { is_error: false } });
         yield {
           type: 'assistant',
           message: { role: 'assistant', content: [{ type: 'text', text: 'done' }] },
@@ -220,23 +220,12 @@ test('ClaudePipedAgent: pipelineEvents emits tool:start on hook fire', async () 
   });
 
   const { ClaudePipedAgent } = await import('./agents/claude-piped.js');
-  const { pipelineEvents } = await import('./events.js');
-
-  const startEvents: any[] = [];
-  const doneEvents: any[] = [];
-  pipelineEvents.on('tool:start', (d: any) => startEvents.push(d));
-  pipelineEvents.on('tool:done', (d: any) => doneEvents.push(d));
-
   const agent = new ClaudePipedAgent();
   await agent.run(1, { name: 'spec', agent: 'claude-piped' } as any, 'prompts/spec.md', 'default', makeContext(projectDir));
 
-  pipelineEvents.removeAllListeners('tool:start');
-  pipelineEvents.removeAllListeners('tool:done');
-
-  assert.strictEqual(startEvents.length, 1);
-  assert.strictEqual(startEvents[0].tool, 'Glob');
-  assert.strictEqual(doneEvents.length, 1);
-  assert.strictEqual(doneEvents[0].success, true);
+  const output = readFileSync(join(projectDir, '.pipeline', 'step-output.log'), 'utf-8');
+  assert.ok(output.includes('[tool:start] Glob'), 'output should contain tool:start line');
+  assert.ok(output.includes('[tool:done]  Glob ✓'), 'output should contain tool:done line');
 
   mock.restoreAll();
   rmSync(projectDir, { recursive: true, force: true });

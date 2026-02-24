@@ -13,14 +13,14 @@ const COLORS = {
  * @param {string} projectDir - Project directory path
  * @param {object} currentState - Current state { phase, step, status }
  */
-export function printBanner(config, projectDir, currentState) {
+export function printBanner(config: any, projectDir: string, currentState: any) {
   const workflowName = config.name || 'Pipeline';
   const projectName = projectDir.split('/').pop();
   const BOX_WIDTH = 60;
 
   // Helper to pad line with spaces and add right border.
   // All ANSI codes must be included in `text`; this function only handles padding.
-  const boxLine = (text) => {
+  const boxLine = (text: string) => {
     const stripped = text.replace(/\x1b\[[0-9;]*m/g, ''); // Remove ANSI codes for length calc
     const padding = ' '.repeat(Math.max(0, BOX_WIDTH - 2 - stripped.length));
     return `║ ${text}${padding}${COLORS.reset} ║`;
@@ -35,7 +35,7 @@ export function printBanner(config, projectDir, currentState) {
 
   // Show steps with current step highlighted
   lines.push(boxLine(`${COLORS.yellow}Pipeline Steps:${COLORS.reset}`));
-  config.steps.forEach((step, idx) => {
+  config.steps.forEach((step: any, idx: number) => {
     const isCurrent = currentState && step.name === currentState.step;
     const marker = isCurrent ? `${COLORS.cyan}▶` : ' ';
     const stepText = isCurrent

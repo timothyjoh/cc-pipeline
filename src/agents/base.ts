@@ -22,6 +22,7 @@ export interface StepDef {
   output?: string;
   testGate?: boolean;
   description?: string;
+  continueOnError?: boolean;
 }
 
 /**

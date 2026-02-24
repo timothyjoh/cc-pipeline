@@ -1,12 +1,14 @@
 import { spawn } from 'node:child_process';
-import { BaseAgent, agentState } from './base.js';
+import { appendFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { BaseAgent, agentState, AgentContext, AgentResult, StepDef } from './base.js';
 
 /**
  * Bash agent - executes shell commands
  * Ports run_bash from run.sh: substitute {{PHASE}} and execute via spawn
  */
 export class BashAgent extends BaseAgent {
-  async run(phase, step, promptPath, model, context) {
+  async run(phase: number, step: StepDef, promptPath: string | null, model: string, context: AgentContext): Promise<AgentResult> {
     const { command } = step;
 
     if (!command) {
@@ -18,31 +20,45 @@ export class BashAgent extends BaseAgent {
 
     console.log(`  Executing: ${cmd}`);
 
+    const outputPath = join(context.projectDir, '.pipeline', 'step-output.log');
+    writeFileSync(outputPath, `$ ${cmd}\n`, 'utf-8');
+
     return new Promise((resolve) => {
-      // Spawn shell process
+      // Pipe stdout/stderr so output is captured for TUI and not swallowed
       const child = spawn(cmd, {
         shell: true,
-        stdio: 'inherit',
+        stdio: ['inherit', 'pipe', 'pipe'],
         cwd: context.projectDir
       });
 
       // Track child process for signal handling
       agentState.setChild(child);
 
+      const onData = (chunk: Buffer) => {
+        const text = chunk.toString();
+        process.stderr.write(text);
+        try { appendFileSync(outputPath, text, 'utf-8'); } catch (_) {}
+      };
+
+      child.stdout?.on('data', onData);
+      child.stderr?.on('data', onData);
+
       child.on('close', (code) => {
         agentState.clearChild();
         resolve({
-          exitCode: code || 0,
-          outputPath: null
+          exitCode: code ?? 1,
+          outputPath
         });
       });
 
       child.on('error', (err) => {
         agentState.clearChild();
-        console.error(`Bash agent error: ${err.message}`);
+        const msg = `Bash agent error: ${err.message}\n`;
+        process.stderr.write(msg);
+        try { appendFileSync(outputPath, msg, 'utf-8'); } catch (_) {}
         resolve({
           exitCode: 1,
-          outputPath: null
+          outputPath
         });
       });
     });

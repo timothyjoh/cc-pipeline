@@ -205,43 +205,31 @@ test('ClaudeInteractiveAgent: tool hooks write to outputPath', async () => {
   rmSync(projectDir, { recursive: true, force: true });
 });
 
-test('ClaudeInteractiveAgent: pipelineEvents fires tool:start and tool:done', async () => {
+test('ClaudeInteractiveAgent: hooks write tool:start and tool:done to output file', async () => {
   if (typeof mock.module !== 'function') return;
 
   const projectDir = setupTempProject();
 
-  let capturedHooks: any = null;
   mock.module('@anthropic-ai/claude-agent-sdk', {
     namedExports: {
       query: async function* ({ options }: any) {
-        capturedHooks = options.hooks;
-        await capturedHooks.PreToolUse[0]({ tool_name: 'Read', tool_input: { file_path: '/foo' } });
-        await capturedHooks.PostToolUse[0]({ tool_name: 'Read', tool_response: { is_error: false } });
+        const hooks = options.hooks;
+        // New format: HookCallbackMatcher[] — each element is { hooks: [fn] }
+        await hooks.PreToolUse[0].hooks[0]({ tool_name: 'Read', tool_input: { file_path: '/foo' } });
+        await hooks.PostToolUse[0].hooks[0]({ tool_name: 'Read', tool_response: { is_error: false } });
         yield ASSISTANT_EVENT;
       },
     },
   });
 
   const { ClaudeInteractiveAgent } = await import('./agents/claude-interactive.js');
-  const { pipelineEvents } = await import('./events.js');
   const agent = new ClaudeInteractiveAgent();
-
-  const startEvents: any[] = [];
-  const doneEvents: any[] = [];
-  const onStart = (d: any) => startEvents.push(d);
-  const onDone = (d: any) => doneEvents.push(d);
-  pipelineEvents.on('tool:start', onStart);
-  pipelineEvents.on('tool:done', onDone);
 
   await agent.run(PHASE, STEP, PROMPT_PATH, 'default', makeContext(projectDir));
 
-  pipelineEvents.off('tool:start', onStart);
-  pipelineEvents.off('tool:done', onDone);
-
-  assert.strictEqual(startEvents.length, 1, 'should fire one tool:start');
-  assert.strictEqual(startEvents[0].tool, 'Read');
-  assert.strictEqual(doneEvents.length, 1, 'should fire one tool:done');
-  assert.strictEqual(doneEvents[0].success, true);
+  const output = readFileSync(join(projectDir, '.pipeline', 'step-output.log'), 'utf-8');
+  assert.ok(output.includes('[tool:start] Read'), 'output should contain tool:start line');
+  assert.ok(output.includes('[tool:done]  Read ✓'), 'output should contain tool:done line');
 
   mock.restoreAll();
   rmSync(projectDir, { recursive: true, force: true });

@@ -1,12 +1,13 @@
 import { existsSync, cpSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import YAML from 'yaml';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEMPLATES_DIR = join(__dirname, '..', '..', 'templates');
 const PKG = JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf-8'));
 
-export async function update(projectDir) {
+export async function update(projectDir: string) {
   const pipelineDir = join(projectDir, '.pipeline');
 
   if (!existsSync(pipelineDir)) {
@@ -52,11 +53,30 @@ export async function update(projectDir) {
     console.log('  ⚠️  Could not fetch frontend-design skill (offline?) — skipping');
   }
 
+  // Patch workflow.yaml: update the commit step command and continue_on_error
+  // without touching any other customizations.
+  const workflowPath = join(pipelineDir, 'workflow.yaml');
+  if (existsSync(workflowPath)) {
+    try {
+      const doc = YAML.parseDocument(readFileSync(workflowPath, 'utf-8'));
+      const steps = doc.get('steps') as YAML.YAMLSeq | undefined;
+      if (steps) {
+        const COMMIT_CMD = "git rev-parse --git-dir > /dev/null 2>&1 || git init && git add -A && git commit -m 'Phase {{PHASE}} complete' || true && git push origin HEAD 2>/dev/null || true";
+        for (const step of steps.items as YAML.YAMLMap[]) {
+          if (step.get('name') === 'commit') {
+            step.set('continue_on_error', true);
+            step.set('command', COMMIT_CMD);
+          }
+        }
+      }
+      writeFileSync(workflowPath, doc.toString(), 'utf-8');
+      console.log('  ✅ Patched .pipeline/workflow.yaml commit step (continue_on_error + safe push)');
+    } catch (e) {
+      console.log('  ⚠️  Could not patch workflow.yaml — update it manually if needed');
+    }
+  }
+
   console.log(`
   ✅ Updated to cc-pipeline v${PKG.version}
-
-  ⚠️  workflow.yaml was NOT changed (your customizations are preserved).
-  If you need the latest default workflow, delete .pipeline/workflow.yaml
-  and run \`cc-pipeline init\` again.
 `);
 }

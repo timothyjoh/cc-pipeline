@@ -8,9 +8,9 @@ import { printBanner } from './logger.js';
  */
 
 // Helper to capture console.log output
-function captureConsoleLog(fn) {
+function captureConsoleLog(fn: () => void) {
   const originalLog = console.log;
-  const output = [];
+  const output: string[] = [];
 
   console.log = (...args) => {
     output.push(args.join(' '));

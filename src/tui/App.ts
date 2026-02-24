@@ -1,15 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useApp } from 'ink';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import YAML from 'yaml';
 import type { EventEmitter } from 'node:events';
 
-interface ToolEntry {
-  kind: 'start' | 'done';
+interface LogEntry {
+  id: number;
+  kind: 'tool' | 'subagent';
   tool: string;
+  detail: string;
+  pending: boolean;
   success?: boolean;
-  ts: number;
+}
+
+interface TextLine {
+  id: number;
+  text: string;
 }
 
 interface AppProps {
@@ -17,110 +24,298 @@ interface AppProps {
   projectDir: string;
 }
 
-function loadStepNames(projectDir: string): string[] {
+interface StepInfo {
+  name: string;
+  description: string;
+}
+
+interface WorkflowMeta {
+  steps: StepInfo[];
+  phasesDir: string;
+}
+
+function loadWorkflowMeta(projectDir: string): WorkflowMeta {
   try {
     const workflowPath = join(projectDir, '.pipeline', 'workflow.yaml');
-    if (!existsSync(workflowPath)) return [];
+    if (!existsSync(workflowPath)) return { steps: [], phasesDir: 'docs/phases' };
     const raw = YAML.parse(readFileSync(workflowPath, 'utf-8'));
-    if (Array.isArray(raw?.steps)) {
-      return raw.steps.map((s: any) => s.name as string);
-    }
+    const steps = Array.isArray(raw?.steps)
+      ? raw.steps.map((s: any) => ({ name: s.name as string, description: (s.description || '') as string }))
+      : [];
+    return { steps, phasesDir: raw?.phases_dir || 'docs/phases' };
   } catch (_) {}
-  return [];
+  return { steps: [], phasesDir: 'docs/phases' };
 }
+
+function loadPhaseDescription(projectDir: string, phasesDir: string, phase: string): string {
+  if (!phase) return '';
+  try {
+    const specPath = join(projectDir, phasesDir, `phase-${phase}`, 'SPEC.md');
+    if (!existsSync(specPath)) return '';
+    const content = readFileSync(specPath, 'utf-8');
+    const match = content.match(/^#{1,2}\s+(.+)/m);
+    return match ? match[1].trim() : '';
+  } catch (_) {}
+  return '';
+}
+
+function extractDetail(tool: string, input: unknown): string {
+  if (!input || typeof input !== 'object') return '';
+  const inp = input as Record<string, unknown>;
+  switch (tool) {
+    case 'Read':
+    case 'Write':
+    case 'Edit':
+      return String(inp.file_path ?? inp.notebook_path ?? '');
+    case 'Bash':
+      return String(inp.command ?? '').replace(/\n/g, ' ').slice(0, 80);
+    case 'Glob':
+      return String(inp.pattern ?? '');
+    case 'Grep':
+      return String(inp.pattern ?? '') + (inp.path ? `  ${inp.path}` : '');
+    case 'WebFetch':
+      return String(inp.url ?? '').slice(0, 60);
+    case 'WebSearch':
+      return String(inp.query ?? '');
+    case 'Task':
+      return String(inp.description ?? '');
+    default:
+      return '';
+  }
+}
+
+let nextId = 0;
 
 export function App({ events, projectDir }: AppProps) {
   const { exit } = useApp();
-  const [stepNames] = useState(() => loadStepNames(projectDir));
+  const [{ steps: stepInfo, phasesDir }] = useState(() => loadWorkflowMeta(projectDir));
+  const stepNames = stepInfo.map(s => s.name);
+  const stepDescriptions = new Map(stepInfo.map(s => [s.name, s.description]));
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
   const [currentStep, setCurrentStep] = useState('');
   const [currentPhase, setCurrentPhase] = useState('');
-  const [tools, setTools] = useState<ToolEntry[]>([]);
+  const [phaseDescription, setPhaseDescription] = useState('');
+  const [log, setLog] = useState<LogEntry[]>([]);
+  const [textLines, setTextLines] = useState<TextLine[]>([]);
   const [status, setStatus] = useState<'running' | 'done' | 'error'>('running');
   const [elapsed, setElapsed] = useState(0);
   const startTime = useState(() => Date.now())[0];
+  const fileOffsetRef = useRef(0);
+  const outputPath = join(projectDir, '.pipeline', 'step-output.log');
 
   useEffect(() => {
     const tick = setInterval(() => setElapsed(Math.floor((Date.now() - startTime) / 1000)), 1000);
     return () => clearInterval(tick);
   }, []);
 
+  // Reload phase description whenever the phase changes or spec step completes
+  useEffect(() => {
+    setPhaseDescription(loadPhaseDescription(projectDir, phasesDir, currentPhase));
+  }, [currentPhase]);
+
+  // Poll step-output.log for real-time activity from agents.
+  // Hooks inside the Agent SDK query() run in a worker context and can't emit
+  // to this process's EventEmitter, so we use file-based IPC instead.
+  useEffect(() => {
+    const poll = () => {
+      try {
+        if (!existsSync(outputPath)) return;
+        const stat = statSync(outputPath);
+        // File was truncated (new step started) — reset
+        if (stat.size < fileOffsetRef.current) fileOffsetRef.current = 0;
+        if (stat.size === fileOffsetRef.current) return;
+
+        const content = readFileSync(outputPath, 'utf-8');
+        const newContent = content.slice(fileOffsetRef.current);
+        fileOffsetRef.current = content.length;
+        if (!newContent) return;
+
+        const lines = newContent.split('\n').map(l => l.trim()).filter(Boolean);
+
+        setLog(prev => {
+          let updated = [...prev];
+          const newTextLines: TextLine[] = [];
+
+          for (const line of lines) {
+            // Resolve initial "starting..." on first real activity
+            if (updated.length > 0 && updated[0].detail === 'starting...') {
+              const isSubagent = line.startsWith('[subagent:start]');
+              updated[0] = { ...updated[0], pending: false, success: true, detail: isSubagent ? 'spawning team...' : 'running' };
+            }
+
+            if (line.startsWith('[tool:start]')) {
+              const m = line.match(/^\[tool:start\] (\S+) (.*)/s);
+              if (m) {
+                const tool = m[1];
+                let input: unknown = {};
+                try { input = JSON.parse(m[2]); } catch (_) {}
+                const detail = extractDetail(tool, input);
+                updated = [...updated.slice(-29), { id: nextId++, kind: 'tool', tool, detail, pending: true }];
+              }
+            } else if (line.startsWith('[tool:done]')) {
+              const m = line.match(/^\[tool:done\]\s+(\S+)\s+([✓✗])/);
+              if (m) {
+                const tool = m[1];
+                const success = m[2] === '✓';
+                const idx = [...updated].reverse().findIndex(e => e.kind === 'tool' && e.tool === tool && e.pending);
+                if (idx !== -1) {
+                  const realIdx = updated.length - 1 - idx;
+                  updated = [...updated];
+                  updated[realIdx] = { ...updated[realIdx], pending: false, success };
+                }
+              }
+            } else if (line.startsWith('[subagent:start]')) {
+              updated = [...updated.slice(-29), { id: nextId++, kind: 'subagent', tool: 'agent', detail: '', pending: true }];
+            } else if (line.startsWith('[subagent:done]')) {
+              const idx = [...updated].reverse().findIndex(e => e.kind === 'subagent' && e.pending);
+              if (idx !== -1) {
+                const realIdx = updated.length - 1 - idx;
+                updated = [...updated];
+                updated[realIdx] = { ...updated[realIdx], pending: false, success: true };
+              }
+            } else if (line.startsWith('[text] ')) {
+              newTextLines.push({ id: nextId++, text: line.slice(7) });
+            } else {
+              // Raw bash output — show as-is
+              newTextLines.push({ id: nextId++, text: line });
+            }
+          }
+
+          if (newTextLines.length > 0) {
+            setTextLines(prev => [...prev, ...newTextLines].slice(-30));
+          }
+
+          return updated;
+        });
+      } catch (_) {}
+    };
+
+    const timer = setInterval(poll, 200);
+    return () => clearInterval(timer);
+  }, []);
+
   useEffect(() => {
     const onStepStart = (d: any) => {
       setCurrentPhase(String(d.phase));
       setCurrentStep(d.step);
+      setTextLines([]);
+      fileOffsetRef.current = 0;
+      const initialLog: LogEntry[] = d.agent && d.agent !== 'bash'
+        ? [{ id: nextId++, kind: 'subagent', tool: 'agent', detail: 'starting...', pending: true }]
+        : [];
+      setLog(initialLog);
     };
     const onStepDone = (d: any) => {
       setCompletedSteps(prev => new Set([...prev, d.step]));
-    };
-    const onToolStart = (d: any) => {
-      setTools(prev => [...prev.slice(-7), { kind: 'start', tool: d.tool, ts: Date.now() }]);
-    };
-    const onToolDone = (d: any) => {
-      setTools(prev => [...prev.slice(-7), { kind: 'done', tool: d.tool, success: d.success, ts: Date.now() }]);
+      if (d.step === 'spec') {
+        setPhaseDescription(loadPhaseDescription(projectDir, phasesDir, String(d.phase)));
+      }
     };
     const onStop = (d: any) => {
       setStatus(d.reason === 'end_turn' ? 'done' : 'error');
       setTimeout(exit, 500);
     };
+    const onLog = (d: any) => {
+      setTextLines(prev => [...prev, { id: nextId++, text: d.message }].slice(-30));
+    };
 
     events.on('step:start', onStepStart);
     events.on('step:done', onStepDone);
-    events.on('tool:start', onToolStart);
-    events.on('tool:done', onToolDone);
     events.on('session:stop', onStop);
+    events.on('pipeline:log', onLog);
 
     return () => {
       events.off('step:start', onStepStart);
       events.off('step:done', onStepDone);
-      events.off('tool:start', onToolStart);
-      events.off('tool:done', onToolDone);
       events.off('session:stop', onStop);
+      events.off('pipeline:log', onLog);
     };
   }, []);
 
   const statusColor = status === 'running' ? 'blue' : status === 'done' ? 'green' : 'red';
   const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
   const secs = String(elapsed % 60).padStart(2, '0');
+  const stepDescription = currentStep ? stepDescriptions.get(currentStep) ?? '' : '';
 
   return React.createElement(
     Box, { flexDirection: 'column', padding: 1 },
 
     // Header
     React.createElement(
-      Box, { marginBottom: 1 },
-      React.createElement(Text, { bold: true }, 'cc-pipeline '),
-      React.createElement(Text, { color: 'cyan' }, `phase ${currentPhase} · ${currentStep} `),
-      React.createElement(Text, { dimColor: true }, `${mins}:${secs}`)
+      Box, { flexDirection: 'column', marginBottom: 1 },
+      React.createElement(
+        Box, {},
+        React.createElement(Text, { bold: true }, 'cc-pipeline '),
+        React.createElement(Text, { color: 'cyan' }, `phase ${currentPhase} · ${currentStep} `),
+        React.createElement(Text, { dimColor: true }, `${mins}:${secs}`)
+      ),
+      phaseDescription
+        ? React.createElement(Text, { dimColor: true }, phaseDescription)
+        : null
     ),
 
-    // Step list
+    // Two-column body
     React.createElement(
-      Box, { flexDirection: 'column', marginBottom: 1 },
-      ...stepNames.map((name, i) => {
-        const isDone = completedSteps.has(name);
-        const isCurrent = currentStep === name;
-        const prefix = isDone ? '✓ ' : isCurrent ? '▶ ' : '  ';
-        return React.createElement(
-          Text,
-          { key: i, color: isCurrent ? 'cyan' : undefined, bold: isCurrent, dimColor: !isCurrent },
-          prefix + name
-        );
-      })
-    ),
+      Box, { flexDirection: 'row' },
 
-    // Tool log
-    React.createElement(
-      Box, { flexDirection: 'column', marginBottom: 1 },
-      ...tools.map((t, i) =>
-        React.createElement(
-          Text, { key: i, dimColor: t.kind === 'start' },
-          t.kind === 'start' ? `  → ${t.tool}` : `  ${t.success ? '✓' : '✗'} ${t.tool}`
+      // Left: step list
+      React.createElement(
+        Box, { flexDirection: 'column', marginRight: 3, minWidth: 14 },
+        ...stepNames.map((name, i) => {
+          const isDone = completedSteps.has(name);
+          const isCurrent = currentStep === name;
+          const prefix = isDone ? '✓ ' : isCurrent ? '▶ ' : '  ';
+          return React.createElement(
+            Text,
+            { key: i, color: isCurrent ? 'green' : undefined, bold: isCurrent, dimColor: !isCurrent && !isDone },
+            prefix + name
+          );
+        })
+      ),
+
+      // Right: step description header + activity log
+      React.createElement(
+        Box, { flexDirection: 'column', flexGrow: 1 },
+
+        // Step description header
+        stepDescription
+          ? React.createElement(
+              Box, { marginBottom: 1 },
+              React.createElement(Text, { bold: true, color: 'white' }, stepDescription)
+            )
+          : null,
+
+        // Activity: tool/subagent log for interactive steps, text stream for piped steps
+        ...(log.length > 0
+          ? log.map(entry => {
+              const icon = entry.pending ? '·' : entry.success ? '✓' : '✗';
+              const iconColor = entry.pending ? undefined : entry.success ? 'green' : 'red';
+              if (entry.kind === 'subagent') {
+                return React.createElement(
+                  Box, { key: entry.id },
+                  React.createElement(Text, { color: iconColor, dimColor: entry.pending }, icon + ' '),
+                  React.createElement(Text, { color: 'yellow', dimColor: entry.pending }, 'agent      '),
+                  React.createElement(Text, { dimColor: true }, entry.detail)
+                );
+              }
+              const toolLabel = entry.tool.padEnd(10);
+              return React.createElement(
+                Box, { key: entry.id },
+                React.createElement(Text, { color: iconColor, dimColor: entry.pending }, icon + ' '),
+                React.createElement(Text, { dimColor: true }, toolLabel + ' '),
+                React.createElement(Text, { color: 'cyan' }, entry.detail)
+              );
+            })
+          : textLines.map(line =>
+              React.createElement(Text, { key: line.id, dimColor: true, wrap: 'truncate' }, line.text)
+            )
         )
       )
     ),
 
     // Status bar
-    React.createElement(Text, { color: statusColor }, `● ${status}`)
+    React.createElement(Box, { marginTop: 1 },
+      React.createElement(Text, { color: statusColor }, `● ${status}`)
+    )
   );
 }

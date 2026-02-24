@@ -25,6 +25,10 @@ const MAX_PHASES = 20;
  * - Signal handling for clean shutdown
  */
 export async function runEngine(projectDir: string, options: any = {}) {
+  const quiet: boolean = !!options.quiet; // suppress banner/step logs when TUI is active
+  const log = (...args: unknown[]) => { if (!quiet) console.log(...args); };
+  const logErr = (...args: unknown[]) => { if (!quiet) console.error(...args); };
+
   const pipelineDir = join(projectDir, '.pipeline');
   const logFile = join(pipelineDir, 'pipeline.jsonl');
   const workflowFile = join(pipelineDir, 'workflow.yaml');
@@ -41,9 +45,9 @@ export async function runEngine(projectDir: string, options: any = {}) {
   const state = getCurrentState(logFile);
   const resumePoint = deriveResumePoint(logFile, config.steps);
 
-  // Print banner
-  printBanner(config, projectDir, state);
-  console.log(`\nResumed state: phase=${resumePoint.phase} step=${resumePoint.stepName} status=${state.status}`);
+  // Print banner (skipped in TUI mode)
+  if (!quiet) printBanner(config, projectDir, state);
+  log(`\nResumed state: phase=${resumePoint.phase} step=${resumePoint.stepName} status=${state.status}`);
 
   // Signal handling — track interrupted state, kill child processes, and allow cancelling sleep
   let interrupted = false;
@@ -53,7 +57,7 @@ export async function runEngine(projectDir: string, options: any = {}) {
 
   const handleSignal = (signal: string) => {
     if (interrupted) return; // Already handling a signal, ignore duplicates
-    console.log(`\nReceived ${signal}, shutting down gracefully...`);
+    log(`\nReceived ${signal}, shutting down gracefully...`);
     interrupted = true;
     agentState.setInterrupted(true);
     if (cancelSleep) cancelSleep();
@@ -64,7 +68,7 @@ export async function runEngine(projectDir: string, options: any = {}) {
     // Kill current child process if any
     const child = agentState.getChild();
     if (child && child.pid) {
-      console.log(`Terminating child process ${child.pid}...`);
+      log(`Terminating child process ${child.pid}...`);
 
       // Send SIGTERM first
       try {
@@ -115,7 +119,7 @@ export async function runEngine(projectDir: string, options: any = {}) {
           const firstLine = readFileSync(reflectFile, 'utf8').split('\n')[0];
           if (firstLine && /PROJECT COMPLETE/i.test(firstLine)) {
             appendEvent(logFile, { event: 'project_complete', phase: phase - 1 });
-            console.log(`PROJECT COMPLETE detected in phase ${phase - 1} reflections.`);
+            log(`PROJECT COMPLETE detected in phase ${phase - 1} reflections.`);
             return;
           }
         }
@@ -143,7 +147,7 @@ export async function runEngine(projectDir: string, options: any = {}) {
         for (let attempt = 0; attempt < retryDelays.length; attempt++) {
           if (attempt > 0) {
             const delaySec = retryDelays[attempt] / 1000;
-            console.log(`\n  Retry ${attempt}/2 for step "${stepDef.name}" in ${delaySec}s...`);
+            log(`\n  Retry ${attempt}/2 for step "${stepDef.name}" in ${delaySec}s...`);
             await new Promise<void>(resolve => {
               const timer = setTimeout(resolve, retryDelays[attempt]);
               cancelSleep = () => { clearTimeout(timer); resolve(); };
@@ -161,6 +165,9 @@ export async function runEngine(projectDir: string, options: any = {}) {
 
           if (lastResult === 'ok' || lastResult === 'skipped') break;
 
+          // Bash steps and steps marked continue_on_error never retry — move on
+          if (stepDef.agent === 'bash' || stepDef.continueOnError) break;
+
           // Log retry
           if (attempt < retryDelays.length - 1) {
             appendEvent(logFile, {
@@ -173,9 +180,9 @@ export async function runEngine(projectDir: string, options: any = {}) {
         }
 
         // If still failed after all retries, stop the pipeline
-        if (lastResult === 'error') {
-          console.error(`\n  Step "${stepDef.name}" failed after 3 attempts. Pipeline stopped.`);
-          console.error(`  Run \`cc-pipeline run\` to retry from this step.`);
+        if (lastResult === 'error' && stepDef.agent !== 'bash' && !stepDef.continueOnError) {
+          logErr(`\n  Step "${stepDef.name}" failed after 3 attempts. Pipeline stopped.`);
+          logErr(`  Run \`cc-pipeline run\` to retry from this step.`);
           appendEvent(logFile, {
             event: 'pipeline_stopped',
             phase,
@@ -194,7 +201,7 @@ export async function runEngine(projectDir: string, options: any = {}) {
 
       // Check phase limit
       if (phaseLimit > 0 && phasesRun >= phaseLimit) {
-        console.log(`Completed ${phasesRun} phase(s) as requested. Stopping.`);
+        log(`Completed ${phasesRun} phase(s) as requested. Stopping.`);
         return;
       }
 
@@ -214,7 +221,7 @@ export async function runEngine(projectDir: string, options: any = {}) {
       }
     }
 
-    console.log(`Hit MAX_PHASES (${MAX_PHASES}). Stopping.`);
+    log(`Hit MAX_PHASES (${MAX_PHASES}). Stopping.`);
   } finally {
     cleanup();
   }
@@ -317,6 +324,18 @@ async function runStep(
     usageFields.weekly_percentage = percentages.weekly_percentage;
   }
 
+  // On error, read the step output file for a description of what went wrong
+  let description: string | undefined;
+  if (status === 'error') {
+    description = result.error;
+    if (!description && result.outputPath) {
+      try {
+        const raw = readFileSync(result.outputPath, 'utf-8').trim();
+        if (raw) description = raw.slice(-2000); // last 2000 chars to stay concise
+      } catch (_) {}
+    }
+  }
+
   appendEvent(logFile, {
     event: 'step_done',
     phase,
@@ -325,6 +344,7 @@ async function runStep(
     status,
     exitCode: result.exitCode,
     ...(result.error && { error: result.error }),
+    ...(description && { description }),
     ...usageFields,
   });
   pipelineEvents.emit('step:done', { phase, step: stepName, agent, exitCode: result.exitCode });

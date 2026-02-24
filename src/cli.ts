@@ -61,7 +61,11 @@ export async function run(args: string[]) {
         const { launchTUI } = await import('./tui/index.js');
         launchTUI(process.cwd());
       }
-      await runPipeline(process.cwd(), options);
+      await runPipeline(process.cwd(), { ...options, quiet: useTUI });
+      if (useTUI) {
+        const { pipelineEvents } = await import('./events.js');
+        pipelineEvents.emit('pipeline:exit', {});
+      }
       break;
     }
     case 'status':

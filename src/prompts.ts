@@ -9,8 +9,8 @@ import { join } from 'node:path';
  * @param {string} promptPath - The relative path to the prompt template (e.g., "prompts/spec.md")
  * @returns {string} The generated prompt with substitutions
  */
-export function generatePrompt(projectDir, config, phase, promptPath) {
-  const promptFile = join(projectDir, '.pipeline', promptPath);
+export function generatePrompt(projectDir: string, config: any, phase: number, promptPath: string | null): string {
+  const promptFile = join(projectDir, '.pipeline', promptPath ?? '');
 
   if (!existsSync(promptFile)) {
     throw new Error(`Prompt file not found: ${promptFile}`);

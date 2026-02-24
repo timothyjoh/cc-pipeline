@@ -2,7 +2,7 @@ import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadConfig } from '../config.js';
 
-export function reset(projectDir) {
+export function reset(projectDir: string) {
   const logFile = join(projectDir, '.pipeline', 'pipeline.jsonl');
   const statusFile = join(projectDir, 'STATUS.md');
 

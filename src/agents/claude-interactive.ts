@@ -49,38 +49,33 @@ export class ClaudeInteractiveAgent extends BaseAgent {
         permissionMode: 'bypassPermissions',
         env: { ...process.env, CLAUDECODE: undefined },
         hooks: {
-          PreToolUse: [async (data: any) => {
+          PreToolUse: [{ hooks: [async (data: any) => {
             const line = `[tool:start] ${data.tool_name} ${JSON.stringify(data.tool_input ?? {}).slice(0, 120)}`;
             log(line);
             appendOutput(line);
-            pipelineEvents.emit('tool:start', { phase, step: step.name, tool: data.tool_name, input: data.tool_input });
-          }],
-          PostToolUse: [async (data: any) => {
+          }] }],
+          PostToolUse: [{ hooks: [async (data: any) => {
             const success = !data.tool_response?.is_error;
             const line = `[tool:done]  ${data.tool_name} ${success ? '✓' : '✗'}`;
             log(line);
             appendOutput(line);
-            pipelineEvents.emit('tool:done', { phase, step: step.name, tool: data.tool_name, success });
-          }],
-          SubagentStart: [async (data: any) => {
+          }] }],
+          SubagentStart: [{ hooks: [async (data: any) => {
             const line = `[subagent:start] ${data.agent_id}`;
             log(line);
             appendOutput(line);
-            pipelineEvents.emit('subagent:start', { phase, step: step.name, agentId: data.agent_id });
-          }],
-          SubagentStop: [async (data: any) => {
+          }] }],
+          SubagentStop: [{ hooks: [async (data: any) => {
             const line = `[subagent:done]  ${data.agent_id}`;
             log(line);
             appendOutput(line);
             if (data.last_assistant_message) {
               appendOutput(data.last_assistant_message);
             }
-            pipelineEvents.emit('subagent:done', { phase, step: step.name, agentId: data.agent_id, output: data.last_assistant_message });
-          }],
-          Stop: [async (data: any) => {
-            log(`[session:stop] reason=${data.stop_reason}`);
-            pipelineEvents.emit('session:stop', { phase, step: step.name, reason: data.stop_reason });
-          }],
+          }] }],
+          Stop: [{ hooks: [async (_data: any) => {
+            log(`[session:stop]`);
+          }] }],
         },
       };
 
@@ -88,10 +83,10 @@ export class ClaudeInteractiveAgent extends BaseAgent {
         queryOptions.model = model;
       }
 
+      queryOptions.abortController = controller;
       for await (const event of query({
         prompt: promptText,
         options: queryOptions,
-        abortController: controller,
       })) {
         if ((event as any).type === 'assistant' && (event as any).message?.role === 'assistant') {
           for (const block of (event as any).message.content ?? []) {
@@ -100,9 +95,11 @@ export class ClaudeInteractiveAgent extends BaseAgent {
             }
           }
         }
-        // Capture cost from the terminal result event
+        // Capture cost and emit session:stop from the result event
         if ((event as any).type === 'result') {
           stepCostUSD = (event as any).total_cost_usd ?? 0;
+          const reason = (event as any).stop_reason ?? 'end_turn';
+          pipelineEvents.emit('session:stop', { phase, step: step.name, reason });
         }
       }
     } catch (err: any) {

@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { getCurrentState, readEvents } from '../state.js';
 
-export function status(projectDir) {
+export function status(projectDir: string) {
   const logFile = join(projectDir, '.pipeline', 'pipeline.jsonl');
 
   // Check if log file exists
@@ -42,8 +42,9 @@ export function status(projectDir) {
       console.log(`${time} │ ${event.padEnd(18)} │ ${fields}`);
     });
     console.log('─'.repeat(52));
-  } catch (err) {
-    console.error(`Failed to read status: ${err.message}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`Failed to read status: ${message}`);
     process.exit(1);
   }
 }

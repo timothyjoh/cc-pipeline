@@ -37,6 +37,9 @@ export class ClaudePipedAgent extends BaseAgent {
       }
     };
 
+    // Clear output file at start so TUI file-tailer sees only this step's content
+    writeFileSync(outputPath, '', 'utf-8');
+
     const outputChunks: string[] = [];
     let stepCostUSD = 0;
 
@@ -47,24 +50,26 @@ export class ClaudePipedAgent extends BaseAgent {
         // CRITICAL: unset CLAUDECODE to prevent SDK conflict when running inside Claude Code
         env: { ...process.env, CLAUDECODE: undefined },
         hooks: {
-          SubagentStart: [async (data: any) => {
+          SubagentStart: [{ hooks: [async (data: any) => {
             log(`[sdk] subagent_start agent_id=${data.agent_id ?? ''}`);
-          }],
-          SubagentStop: [async (data: any) => {
+            appendFileSync(outputPath, `[subagent:start] ${data.agent_id ?? ''}\n`, 'utf-8');
+          }] }],
+          SubagentStop: [{ hooks: [async (data: any) => {
             const msg = data.last_assistant_message ?? '';
             log(`[sdk] subagent_stop agent_id=${data.agent_id ?? ''} msg=${msg.substring(0, 120)}`);
-          }],
-          PreToolUse: [async (data: any) => {
+            appendFileSync(outputPath, `[subagent:done]  ${data.agent_id ?? ''}\n`, 'utf-8');
+          }] }],
+          PreToolUse: [{ hooks: [async (data: any) => {
             const line = `[tool:start] ${data.tool_name} ${JSON.stringify(data.tool_input ?? {}).slice(0, 120)}`;
             log(line);
-            pipelineEvents.emit('tool:start', { phase, step: step.name, tool: data.tool_name, input: data.tool_input });
-          }],
-          PostToolUse: [async (data: any) => {
+            appendFileSync(outputPath, line + '\n', 'utf-8');
+          }] }],
+          PostToolUse: [{ hooks: [async (data: any) => {
             const success = !data.tool_response?.is_error;
-            const line = `[tool:start] ${data.tool_name} ${success ? '✓' : '✗'}`;
+            const line = `[tool:done]  ${data.tool_name} ${success ? '✓' : '✗'}`;
             log(line);
-            pipelineEvents.emit('tool:done', { phase, step: step.name, tool: data.tool_name, success });
-          }],
+            appendFileSync(outputPath, line + '\n', 'utf-8');
+          }] }],
         },
       };
 
@@ -72,15 +77,24 @@ export class ClaudePipedAgent extends BaseAgent {
         queryOptions.model = model;
       }
 
+      queryOptions.abortController = controller;
       for await (const event of query({
         prompt: promptText,
         options: queryOptions,
-        abortController: controller,
       })) {
         if ((event as any).type === 'assistant' && (event as any).message?.role === 'assistant') {
           for (const block of (event as any).message.content ?? []) {
             if ((block as any).type === 'text') {
               outputChunks.push((block as any).text);
+              // Write text lines to output file in real time for TUI file-tailing
+              const textLines = (block as any).text
+                .split('\n')
+                .map((l: string) => l.trim())
+                .filter((l: string) => l.length > 0)
+                .map((l: string) => '[text] ' + l)
+                .join('\n');
+              if (textLines) appendFileSync(outputPath, textLines + '\n', 'utf-8');
+              pipelineEvents.emit('text:chunk', { phase, step: step.name, text: (block as any).text });
             }
           }
         }
