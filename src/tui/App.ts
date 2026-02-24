@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useApp } from 'ink';
-import { readFileSync, existsSync, statSync } from 'node:fs';
+import { openSync, readSync, closeSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import YAML from 'yaml';
 import type { EventEmitter } from 'node:events';
@@ -130,9 +130,14 @@ export function App({ events, projectDir }: AppProps) {
         if (stat.size < fileOffsetRef.current) fileOffsetRef.current = 0;
         if (stat.size === fileOffsetRef.current) return;
 
-        const content = readFileSync(outputPath, 'utf-8');
-        const newContent = content.slice(fileOffsetRef.current);
-        fileOffsetRef.current = content.length;
+        // Read only new bytes — avoids loading the whole file each tick
+        const toRead = Math.min(stat.size - fileOffsetRef.current, 65536);
+        const buf = Buffer.alloc(toRead);
+        const fd = openSync(outputPath, 'r');
+        const bytesRead = readSync(fd, buf, 0, toRead, fileOffsetRef.current);
+        closeSync(fd);
+        fileOffsetRef.current += bytesRead;
+        const newContent = buf.slice(0, bytesRead).toString('utf-8');
         if (!newContent) return;
 
         const lines = newContent.split('\n').map(l => l.trim()).filter(Boolean);
