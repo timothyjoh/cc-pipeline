@@ -79,3 +79,10 @@ steps:
 # Usage tracking
 usage_check:
   when: phase_boundary    # pipeline_start, phase_boundary, every_step
+
+# Usage budget thresholds for session_percentage / weekly_percentage
+# in the pipeline.jsonl `status` step_done event.
+# Adjust to match your Claude subscription tier.
+usage_limits:
+  session_budget_usd: 5     # cost budget per pipeline run
+  weekly_budget_usd: 25     # cost budget per week

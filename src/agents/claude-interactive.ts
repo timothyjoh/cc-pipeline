@@ -41,6 +41,7 @@ export class ClaudeInteractiveAgent extends BaseAgent {
     };
 
     const outputChunks: string[] = [];
+    let stepCostUSD = 0;
 
     try {
       const queryOptions: any = {
@@ -99,6 +100,10 @@ export class ClaudeInteractiveAgent extends BaseAgent {
             }
           }
         }
+        // Capture cost from the terminal result event
+        if ((event as any).type === 'result') {
+          stepCostUSD = (event as any).total_cost_usd ?? 0;
+        }
       }
     } catch (err: any) {
       agentState.off('interrupt', onInterrupt);
@@ -124,7 +129,7 @@ export class ClaudeInteractiveAgent extends BaseAgent {
       return { exitCode: 130, outputPath };
     }
 
-    return { exitCode: 0, outputPath };
+    return { exitCode: 0, outputPath, usage: { costUSD: stepCostUSD } };
   }
 }
 

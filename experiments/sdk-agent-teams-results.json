@@ -1,0 +1,139 @@
+{
+  "note": "Parent query() loop was killed (SIGTERM) before it could auto-save. This file was reconstructed from the output log and coordination files on disk.",
+  "prompt": "You are the team lead. Create a small agent team with TWO teammates to research this topic in parallel:\n\n- Teammate 1: Research what hooks the Claude Agent SDK TypeScript exposes and list them\n- Teammate 2: Research how agent team coordination works (inbox, task list, file paths used)\n\nCoordinate through the team system. Wait for both teammates to complete, then summarize their combined findings in 3 bullet points.",
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "permissionMode": "bypassPermissions"
+  },
+  "parentSession": {
+    "sessionId": "c4d1a158-deba-42f0-a7a8-7d29a2ad5515",
+    "totalEvents": 13,
+    "numTurns": 4,
+    "durationMs": 15829,
+    "exitReason": "result/success — parent exited after spawning background teammates",
+    "eventCounts": {
+      "system/init": 1,
+      "assistant": 4,
+      "user": 4,
+      "system/task_started": 2,
+      "result/success": 1
+    }
+  },
+  "hooksFired": {
+    "PreToolUse:TeamCreate": 1,
+    "PostToolUse:TeamCreate": 1,
+    "PreToolUse:Task": 2,
+    "PostToolUse:Task": 2,
+    "SubagentStart": 2,
+    "Stop": 1,
+    "PreToolUse:WebSearch": 1,
+    "PreToolUse:Glob": 1,
+    "TeammateIdle": 0,
+    "TaskCompleted": 0,
+    "SubagentStop": 0
+  },
+  "teamCreated": {
+    "teamName": "sdk-research",
+    "teamFilePath": "/Users/timothyjohnson/.claude/teams/sdk-research/config.json",
+    "leadAgentId": "team-lead@sdk-research"
+  },
+  "teammatesSpawned": [
+    {
+      "name": "hooks-researcher",
+      "agentId": "hooks-researcher@sdk-research",
+      "subagentInternalId": "ae6f2d34f8a10c4ff",
+      "model": "claude-opus-4-6",
+      "backendType": "in-process",
+      "tmuxPaneId": "in-process",
+      "color": "blue",
+      "taskId": "t398ff9",
+      "status": "completed_after_parent_exited"
+    },
+    {
+      "name": "coordination-researcher",
+      "agentId": "coordination-researcher@sdk-research",
+      "subagentInternalId": "a3ac3fecb4b5a5404",
+      "model": "claude-opus-4-6",
+      "backendType": "in-process",
+      "tmuxPaneId": "in-process",
+      "color": "green",
+      "taskId": "t59e2bf",
+      "status": "completed_after_parent_exited"
+    }
+  ],
+  "coordinationFiles": {
+    "teamConfig": {
+      "path": "/Users/timothyjohnson/.claude/teams/sdk-research/config.json",
+      "name": "sdk-research",
+      "leadAgentId": "team-lead@sdk-research",
+      "members": 3
+    },
+    "taskFiles": [
+      {
+        "path": "/Users/timothyjohnson/.claude/tasks/sdk-research/1.json",
+        "id": "1",
+        "subject": "hooks-researcher",
+        "status": "in_progress",
+        "note": "Never marked completed — teammates ran headlessly and did not call TaskUpdate"
+      },
+      {
+        "path": "/Users/timothyjohnson/.claude/tasks/sdk-research/2.json",
+        "id": "2",
+        "subject": "coordination-researcher",
+        "status": "in_progress",
+        "note": "Never marked completed — teammates ran headlessly and did not call TaskUpdate"
+      }
+    ],
+    "inboxMessages": [
+      {
+        "from": "hooks-researcher",
+        "type": "research_findings",
+        "timestamp": "2026-02-22T12:57:00.272Z",
+        "summary": "Complete hooks research — 17 hooks documented with types and usage"
+      },
+      {
+        "from": "hooks-researcher",
+        "type": "idle_notification",
+        "timestamp": "2026-02-22T12:57:04.842Z"
+      },
+      {
+        "from": "coordination-researcher",
+        "type": "research_findings",
+        "timestamp": "2026-02-22T12:58:20.169Z",
+        "summary": "Full coordination research — file paths, inbox format, task system, backends"
+      },
+      {
+        "from": "coordination-researcher",
+        "type": "idle_notification",
+        "timestamp": "2026-02-22T12:58:27.369Z"
+      }
+    ]
+  },
+  "parentEventLog": [
+    {"index": 0, "label": "system/init", "sessionId": "c4d1a158-deba-42f0-a7a8-7d29a2ad5515"},
+    {"index": 1, "label": "assistant", "note": "Claude plans TeamCreate"},
+    {"index": 2, "label": "assistant", "note": "Claude calls TeamCreate"},
+    {"hookBefore": "PreToolUse:TeamCreate"},
+    {"hookAfter": "PostToolUse:TeamCreate", "response": {"team_name": "sdk-research", "lead_agent_id": "team-lead@sdk-research"}},
+    {"index": 3, "label": "user", "note": "TeamCreate result"},
+    {"index": 4, "label": "assistant", "note": "Claude plans Task spawn #1"},
+    {"index": 5, "label": "assistant", "note": "Claude calls Task for hooks-researcher + coordination-researcher"},
+    {"hookBefore": "PreToolUse:Task", "teammate": "hooks-researcher"},
+    {"hookAfter": "PostToolUse:Task", "response": {"status": "teammate_spawned", "tmux_session_name": "in-process"}},
+    {"hookFired": "SubagentStart", "agent_id": "ae6f2d34f8a10c4ff", "agent_type": "hooks-researcher"},
+    {"index": 6, "label": "user", "note": "Task result — teammate_spawned"},
+    {"hookBefore": "PreToolUse:WebSearch"},
+    {"index": 7, "label": "assistant", "note": "Claude calls Task for coordination-researcher"},
+    {"hookBefore": "PreToolUse:Task", "teammate": "coordination-researcher"},
+    {"hookAfter": "PostToolUse:Task", "response": {"status": "teammate_spawned", "tmux_session_name": "in-process"}},
+    {"hookFired": "SubagentStart", "agent_id": "a3ac3fecb4b5a5404", "agent_type": "coordination-researcher"},
+    {"index": 8, "label": "user", "note": "Task result — teammate_spawned"},
+    {"hookBefore": "PreToolUse:WebSearch"},
+    {"hookBefore": "PreToolUse:Glob"},
+    {"index": 9, "label": "assistant", "note": "Claude says 'Both teammates running, waiting for messages'"},
+    {"hookFired": "Stop", "last_assistant_message": "Both teammates are now running in parallel! I'll wait for their messages to arrive."},
+    {"index": 10, "label": "system/task_started", "task_id": "t398ff9", "note": "hooks-researcher task"},
+    {"index": 11, "label": "system/task_started", "task_id": "t59e2bf", "note": "coordination-researcher task"},
+    {"index": 12, "label": "result/success", "num_turns": 4, "duration_ms": 15829, "note": "Parent exits — teammates continue in background"}
+  ]
+}

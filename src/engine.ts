@@ -8,6 +8,7 @@ import { BashAgent } from './agents/bash.js';
 import { ClaudePipedAgent } from './agents/claude-piped.js';
 import { ClaudeInteractiveAgent } from './agents/claude-interactive.js';
 import { pipelineEvents } from './events.js';
+import { computeUsagePercentages } from './usage.js';
 
 const MAX_PHASES = 20;
 
@@ -97,6 +98,9 @@ export async function runEngine(projectDir: string, options: any = {}) {
   };
 
   try {
+    // Accumulated SDK cost for this pipeline run (used for session_percentage)
+    let sessionCostUSD = 0;
+
     // Main loop (phase and currentStepName already declared above for signal handler)
     let phasesRun = 0;
 
@@ -148,7 +152,9 @@ export async function runEngine(projectDir: string, options: any = {}) {
             if (interrupted) throw new Error('Pipeline interrupted by signal');
           }
 
-          lastResult = await runStep(phase, stepDef, projectDir, config, logFile, options);
+          const stepResult = await runStep(phase, stepDef, projectDir, config, logFile, options, sessionCostUSD);
+          sessionCostUSD += stepResult.costUSD ?? 0;
+          lastResult = stepResult.status;
 
           // If interrupted during step execution, bail immediately
           if (interrupted) throw new Error('Pipeline interrupted by signal');
@@ -216,8 +222,17 @@ export async function runEngine(projectDir: string, options: any = {}) {
 
 /**
  * Execute a single pipeline step.
+ * Returns { status: 'ok'|'error'|'skipped', costUSD: number }
  */
-async function runStep(phase: number, stepDef: any, projectDir: string, config: any, logFile: string, options: any = {}) {
+async function runStep(
+  phase: number,
+  stepDef: any,
+  projectDir: string,
+  config: any,
+  logFile: string,
+  options: any = {},
+  sessionCostUSD: number = 0,
+): Promise<{ status: string; costUSD: number }> {
   const { name: stepName, agent, skipUnless, output, testGate } = stepDef;
 
   // Check skipUnless condition
@@ -231,7 +246,7 @@ async function runStep(phase: number, stepDef: any, projectDir: string, config: 
         reason: `${skipUnless} not found`,
       });
       console.log(`Skipping ${stepName} (${skipUnless} not found)`);
-      return 'skipped';
+      return { status: 'skipped', costUSD: 0 };
     }
   }
 
@@ -283,11 +298,25 @@ async function runStep(phase: number, stepDef: any, projectDir: string, config: 
   // the 'interrupted' event, and we want that to be the last event so
   // resume logic treats this step as needing retry (status: 'running').
   if (agentState.isInterrupted()) {
-    return 'error';
+    return { status: 'error', costUSD: 0 };
   }
+
+  // Capture cost from agent result (SDK agents return usage.costUSD)
+  const stepCostUSD: number = result.usage?.costUSD ?? 0;
 
   // Log step done
   const status = result.exitCode === 0 ? 'ok' : 'error';
+
+  // For the 'status' step, include session_percentage and weekly_percentage
+  // so pipeline observers can track API usage over time.
+  const usageFields: Record<string, number> = {};
+  if (stepName === 'status' && status === 'ok') {
+    const accumulatedCost = sessionCostUSD + stepCostUSD;
+    const percentages = computeUsagePercentages(accumulatedCost, config.usageLimits);
+    usageFields.session_percentage = percentages.session_percentage;
+    usageFields.weekly_percentage = percentages.weekly_percentage;
+  }
+
   appendEvent(logFile, {
     event: 'step_done',
     phase,
@@ -296,6 +325,7 @@ async function runStep(phase: number, stepDef: any, projectDir: string, config: 
     status,
     exitCode: result.exitCode,
     ...(result.error && { error: result.error }),
+    ...usageFields,
   });
   pipelineEvents.emit('step:done', { phase, step: stepName, agent, exitCode: result.exitCode });
 
@@ -325,5 +355,5 @@ async function runStep(phase: number, stepDef: any, projectDir: string, config: 
     console.log(`  [STUB] Would run test gate for ${stepName}`);
   }
 
-  return status;
+  return { status, costUSD: stepCostUSD };
 }

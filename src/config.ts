@@ -24,7 +24,13 @@ export function loadConfig(projectDir) {
     version: raw.version || 1,
     phasesDir: raw.phases_dir || 'docs/phases',
     steps: [],
-    usageCheck: raw.usage_check || { when: 'phase_boundary' }
+    usageCheck: raw.usage_check || { when: 'phase_boundary' },
+    usageLimits: {
+      // Cost budget per pipeline run (USD). Default: $5.
+      sessionBudgetUSD: raw.usage_limits?.session_budget_usd ?? 5.0,
+      // Cost budget per week (USD). Default: $25.
+      weeklyBudgetUSD: raw.usage_limits?.weekly_budget_usd ?? 25.0,
+    },
   };
 
   // Normalize steps array
