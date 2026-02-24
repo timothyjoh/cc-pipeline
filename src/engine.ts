@@ -6,6 +6,7 @@ import { printBanner } from './logger.js';
 import { agentState } from './agents/base.js';
 import { BashAgent } from './agents/bash.js';
 import { ClaudeCodeAgent } from './agents/claudecode.js';
+import { CodexAgent } from './agents/codex.js';
 import { pipelineEvents } from './events.js';
 import { computeUsagePercentages } from './usage.js';
 
@@ -284,10 +285,14 @@ async function runStep(
       // Legacy aliases kept for backwards compat with existing workflow.yaml files
       case 'claudecode':
       case 'claude-piped':
-      case 'claude-interactive':
-      case 'codex-interactive': {
+      case 'claude-interactive': {
         const ccAgent = new ClaudeCodeAgent();
         result = await ccAgent.run(phase, stepDef, promptPath, model, context);
+        break;
+      }
+      case 'codex': {
+        const codexAgent = new CodexAgent();
+        result = await codexAgent.run(phase, stepDef, promptPath, model, context);
         break;
       }
       default:

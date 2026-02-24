@@ -28,8 +28,8 @@ This is the main config file. It defines the step order, which agent runs each s
 
 | Agent | How it runs | Best for |
 |-------|------------|----------|
-| `claude-piped` | `claude -p "<prompt>"` (non-interactive) | Planning, analysis, reviews, docs |
-| `claude-interactive` | Claude in a tmux session with full tool access | Building code, fixing issues |
+| `claudecode` | Claude Agent SDK (non-interactive) | All AI steps — spec, plan, build, review, etc. |
+| `codex` | `codex --yolo [--model <model>] "<prompt>"` | Alternative AI steps using OpenAI Codex CLI |
 | `bash` | Direct shell command | Git commits, scripts |
 
 ### Adding/Removing Steps
@@ -54,7 +54,7 @@ steps:
 
   - name: security
     description: "Security audit of new code"
-    agent: claude-piped
+    agent: claudecode
     model: opus
     prompt: prompts/security.md
     output: "SECURITY.md"
