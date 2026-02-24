@@ -2,10 +2,12 @@
 
 # Agents:
 #   claudecode  → Claude Code via Agent SDK (all AI steps)
+#   codex       → OpenAI Codex CLI (alternative for build/fix steps)
 #   bash        → run shell command directly, no AI
 #
 # Models (optional — omit to use CLI default):
-#   opus, sonnet, haiku
+#   claudecode: opus, sonnet, haiku
+#   codex:      o4-mini, o3, o3-mini
 
 name: "Default Pipeline"
 version: 1
@@ -37,6 +39,8 @@ steps:
   - name: build
     description: "Implement the plan with agent teams"
     agent: claudecode
+    # agent: codex        # alternative: use OpenAI Codex CLI
+    # model: o4-mini      # codex model (only used if agent: codex)
     prompt: prompts/build.md
     test_gate: true
 
@@ -50,6 +54,7 @@ steps:
   - name: fix
     description: "Address review findings"
     agent: claudecode
+    # agent: codex        # alternative: use OpenAI Codex CLI
     prompt: prompts/fix.md
     skip_unless: "MUST-FIX.md"
     test_gate: true
