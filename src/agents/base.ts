@@ -10,6 +10,7 @@ export interface AgentResult {
   exitCode: number;
   outputPath: string | null;
   error?: string;
+  usage?: { costUSD: number };
 }
 
 export interface StepDef {

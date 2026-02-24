@@ -5,17 +5,16 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 /**
- * Unit tests for ClaudeInteractiveAgent (SDK-based implementation)
- * and --ui / --no-ui CLI flag parsing.
+ * Unit tests for ClaudeCodeAgent (merged SDK-based implementation).
+ * Replaces the former claude-piped.test.ts and claude-interactive.test.ts.
  */
 
-// Helper: build a minimal async generator from an array of events
 async function* eventsFrom(events: any[]) {
   for (const e of events) yield e;
 }
 
 function setupTempProject() {
-  const projectDir = mkdtempSync(join(tmpdir(), 'cc-interactive-test-'));
+  const projectDir = mkdtempSync(join(tmpdir(), 'cc-claudecode-test-'));
   mkdirSync(join(projectDir, '.pipeline'), { recursive: true });
   mkdirSync(join(projectDir, 'prompts'), { recursive: true });
   writeFileSync(join(projectDir, 'prompts', 'build.md'), 'build the project', 'utf-8');
@@ -30,7 +29,7 @@ function makeContext(projectDir: string) {
   };
 }
 
-const STEP = { name: 'build', agent: 'claude-interactive' };
+const STEP = { name: 'build', agent: 'claudecode' };
 const PHASE = 1;
 const PROMPT_PATH = 'prompts/build.md';
 
@@ -42,9 +41,9 @@ const ASSISTANT_EVENT = {
   },
 };
 
-// ─── Agent tests ────────────────────────────────────────────────────────────
+// ─── Agent tests ─────────────────────────────────────────────────────────────
 
-test('ClaudeInteractiveAgent: exitCode 0 on success, writes assistant text to outputPath', async () => {
+test('ClaudeCodeAgent: exitCode 0 on success, writes assistant text to outputPath', async () => {
   if (typeof mock.module !== 'function') return;
 
   const projectDir = setupTempProject();
@@ -55,8 +54,8 @@ test('ClaudeInteractiveAgent: exitCode 0 on success, writes assistant text to ou
     },
   });
 
-  const { ClaudeInteractiveAgent } = await import('./agents/claude-interactive.js');
-  const agent = new ClaudeInteractiveAgent();
+  const { ClaudeCodeAgent } = await import('./agents/claudecode.js');
+  const agent = new ClaudeCodeAgent();
   const result = await agent.run(PHASE, STEP, PROMPT_PATH, 'default', makeContext(projectDir));
 
   assert.strictEqual(result.exitCode, 0);
@@ -68,7 +67,7 @@ test('ClaudeInteractiveAgent: exitCode 0 on success, writes assistant text to ou
   rmSync(projectDir, { recursive: true, force: true });
 });
 
-test('ClaudeInteractiveAgent: exitCode 1 on thrown error, writes error to outputPath', async () => {
+test('ClaudeCodeAgent: exitCode 1 on thrown error, writes error to outputPath', async () => {
   if (typeof mock.module !== 'function') return;
 
   const projectDir = setupTempProject();
@@ -83,8 +82,8 @@ test('ClaudeInteractiveAgent: exitCode 1 on thrown error, writes error to output
     namedExports: { query: throwingQuery },
   });
 
-  const { ClaudeInteractiveAgent } = await import('./agents/claude-interactive.js');
-  const agent = new ClaudeInteractiveAgent();
+  const { ClaudeCodeAgent } = await import('./agents/claudecode.js');
+  const agent = new ClaudeCodeAgent();
   const result = await agent.run(PHASE, STEP, PROMPT_PATH, 'claude-sonnet-4-5', makeContext(projectDir));
 
   assert.strictEqual(result.exitCode, 1);
@@ -96,7 +95,7 @@ test('ClaudeInteractiveAgent: exitCode 1 on thrown error, writes error to output
   rmSync(projectDir, { recursive: true, force: true });
 });
 
-test('ClaudeInteractiveAgent: exitCode 130 when agentState.interrupted before run', async () => {
+test('ClaudeCodeAgent: exitCode 130 when agentState.interrupted before run', async () => {
   if (typeof mock.module !== 'function') return;
 
   const projectDir = setupTempProject();
@@ -108,11 +107,11 @@ test('ClaudeInteractiveAgent: exitCode 130 when agentState.interrupted before ru
     },
   });
 
-  const { ClaudeInteractiveAgent } = await import('./agents/claude-interactive.js');
+  const { ClaudeCodeAgent } = await import('./agents/claudecode.js');
   const { agentState } = await import('./agents/base.js');
 
   agentState.setInterrupted(true);
-  const agent = new ClaudeInteractiveAgent();
+  const agent = new ClaudeCodeAgent();
   const result = await agent.run(PHASE, STEP, PROMPT_PATH, 'default', makeContext(projectDir));
 
   assert.strictEqual(result.exitCode, 130);
@@ -123,7 +122,7 @@ test('ClaudeInteractiveAgent: exitCode 130 when agentState.interrupted before ru
   rmSync(projectDir, { recursive: true, force: true });
 });
 
-test('ClaudeInteractiveAgent: model not passed when model === "default"', async () => {
+test('ClaudeCodeAgent: model not passed when model === "default"', async () => {
   if (typeof mock.module !== 'function') return;
 
   const projectDir = setupTempProject();
@@ -138,8 +137,8 @@ test('ClaudeInteractiveAgent: model not passed when model === "default"', async 
     },
   });
 
-  const { ClaudeInteractiveAgent } = await import('./agents/claude-interactive.js');
-  const agent = new ClaudeInteractiveAgent();
+  const { ClaudeCodeAgent } = await import('./agents/claudecode.js');
+  const agent = new ClaudeCodeAgent();
   await agent.run(PHASE, STEP, PROMPT_PATH, 'default', makeContext(projectDir));
 
   assert.ok(!('model' in capturedOptions), 'model should NOT be set when model === "default"');
@@ -148,7 +147,7 @@ test('ClaudeInteractiveAgent: model not passed when model === "default"', async 
   rmSync(projectDir, { recursive: true, force: true });
 });
 
-test('ClaudeInteractiveAgent: model passed when model is a real identifier', async () => {
+test('ClaudeCodeAgent: model passed when model is a real identifier', async () => {
   if (typeof mock.module !== 'function') return;
 
   const projectDir = setupTempProject();
@@ -163,8 +162,8 @@ test('ClaudeInteractiveAgent: model passed when model is a real identifier', asy
     },
   });
 
-  const { ClaudeInteractiveAgent } = await import('./agents/claude-interactive.js');
-  const agent = new ClaudeInteractiveAgent();
+  const { ClaudeCodeAgent } = await import('./agents/claudecode.js');
+  const agent = new ClaudeCodeAgent();
   await agent.run(PHASE, STEP, PROMPT_PATH, 'claude-opus-4-6', makeContext(projectDir));
 
   assert.strictEqual(capturedOptions?.model, 'claude-opus-4-6');
@@ -173,39 +172,7 @@ test('ClaudeInteractiveAgent: model passed when model is a real identifier', asy
   rmSync(projectDir, { recursive: true, force: true });
 });
 
-test('ClaudeInteractiveAgent: tool hooks write to outputPath', async () => {
-  if (typeof mock.module !== 'function') return;
-
-  const projectDir = setupTempProject();
-
-  // Simulate a PreToolUse / PostToolUse hook by having query fire hooks via options
-  let capturedHooks: any = null;
-  mock.module('@anthropic-ai/claude-agent-sdk', {
-    namedExports: {
-      query: async function* ({ options }: any) {
-        capturedHooks = options.hooks;
-        // Fire the hooks manually to simulate tool use
-        await capturedHooks.PreToolUse[0]({ tool_name: 'Bash', tool_input: { command: 'ls' } });
-        await capturedHooks.PostToolUse[0]({ tool_name: 'Bash', tool_response: { is_error: false } });
-        yield ASSISTANT_EVENT;
-      },
-    },
-  });
-
-  const { ClaudeInteractiveAgent } = await import('./agents/claude-interactive.js');
-  const agent = new ClaudeInteractiveAgent();
-  const result = await agent.run(PHASE, STEP, PROMPT_PATH, 'default', makeContext(projectDir));
-
-  assert.strictEqual(result.exitCode, 0);
-  const output = readFileSync(result.outputPath!, 'utf-8');
-  assert.ok(output.includes('[tool:start] Bash'), 'output should contain tool:start line');
-  assert.ok(output.includes('[tool:done]  Bash ✓'), 'output should contain tool:done line');
-
-  mock.restoreAll();
-  rmSync(projectDir, { recursive: true, force: true });
-});
-
-test('ClaudeInteractiveAgent: hooks write tool:start and tool:done to output file', async () => {
+test('ClaudeCodeAgent: hooks write tool:start and tool:done to output file', async () => {
   if (typeof mock.module !== 'function') return;
 
   const projectDir = setupTempProject();
@@ -214,7 +181,7 @@ test('ClaudeInteractiveAgent: hooks write tool:start and tool:done to output fil
     namedExports: {
       query: async function* ({ options }: any) {
         const hooks = options.hooks;
-        // New format: HookCallbackMatcher[] — each element is { hooks: [fn] }
+        // HookCallbackMatcher[] format — each element is { hooks: [fn] }
         await hooks.PreToolUse[0].hooks[0]({ tool_name: 'Read', tool_input: { file_path: '/foo' } });
         await hooks.PostToolUse[0].hooks[0]({ tool_name: 'Read', tool_response: { is_error: false } });
         yield ASSISTANT_EVENT;
@@ -222,9 +189,8 @@ test('ClaudeInteractiveAgent: hooks write tool:start and tool:done to output fil
     },
   });
 
-  const { ClaudeInteractiveAgent } = await import('./agents/claude-interactive.js');
-  const agent = new ClaudeInteractiveAgent();
-
+  const { ClaudeCodeAgent } = await import('./agents/claudecode.js');
+  const agent = new ClaudeCodeAgent();
   await agent.run(PHASE, STEP, PROMPT_PATH, 'default', makeContext(projectDir));
 
   const output = readFileSync(join(projectDir, '.pipeline', 'step-output.log'), 'utf-8');
@@ -235,16 +201,25 @@ test('ClaudeInteractiveAgent: hooks write tool:start and tool:done to output fil
   rmSync(projectDir, { recursive: true, force: true });
 });
 
-test('ClaudeInteractiveAgent: createAgent() returns a ClaudeInteractiveAgent instance', async () => {
-  const { ClaudeInteractiveAgent, createAgent } = await import('./agents/claude-interactive.js');
+test('ClaudeCodeAgent: createAgent() returns a ClaudeCodeAgent instance', async () => {
+  const { ClaudeCodeAgent, createAgent } = await import('./agents/claudecode.js');
   const agent = createAgent();
-  assert.ok(agent instanceof ClaudeInteractiveAgent);
+  assert.ok(agent instanceof ClaudeCodeAgent);
 });
 
-// ─── CLI flag tests ──────────────────────────────────────────────────────────
+test('ClaudeCodeAgent: pipelineEvents imported from events.ts', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { join: pathJoin, dirname } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const __dir = dirname(fileURLToPath(import.meta.url));
+  const source = readFileSync(pathJoin(__dir, 'agents', 'claudecode.ts'), 'utf8');
+  assert.ok(source.includes("from '../events.js'"), 'should import pipelineEvents from events.js');
+  assert.ok(!source.includes('export const pipelineEvents'), 'should NOT export pipelineEvents');
+});
+
+// ─── CLI flag tests ───────────────────────────────────────────────────────────
 
 test('CLI: --ui flag sets options.ui = true', async () => {
-  // Read cli.ts source and verify --ui parsing is present
   const { readFileSync } = await import('node:fs');
   const { join: pathJoin, dirname } = await import('node:path');
   const { fileURLToPath } = await import('node:url');
@@ -275,7 +250,6 @@ test('CLI: useTUI logic — --ui always launches TUI', async () => {
 });
 
 test('CLI: useTUI logic — unit test the expression', () => {
-  // Test the logic directly as a pure expression
   const computeUseTUI = (options: any, isTTY: boolean) =>
     options.ui ?? (options.noUi ? false : isTTY);
 
@@ -283,14 +257,4 @@ test('CLI: useTUI logic — unit test the expression', () => {
   assert.strictEqual(computeUseTUI({ noUi: true }, true), false, '--no-ui forces TUI off even if TTY');
   assert.strictEqual(computeUseTUI({}, true), true, 'TTY=true with no flags enables TUI');
   assert.strictEqual(computeUseTUI({}, false), false, 'TTY=false with no flags disables TUI');
-});
-
-test('pipelineEvents is imported from events.ts, not exported from claude-interactive', async () => {
-  const { readFileSync } = await import('node:fs');
-  const { join: pathJoin, dirname } = await import('node:path');
-  const { fileURLToPath } = await import('node:url');
-  const __dir = dirname(fileURLToPath(import.meta.url));
-  const source = readFileSync(pathJoin(__dir, 'agents', 'claude-interactive.ts'), 'utf8');
-  assert.ok(source.includes("from '../events.js'"), 'should import pipelineEvents from events.js');
-  assert.ok(!source.includes('export const pipelineEvents'), 'should NOT export pipelineEvents');
 });

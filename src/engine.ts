@@ -5,8 +5,7 @@ import { loadConfig } from './config.js';
 import { printBanner } from './logger.js';
 import { agentState } from './agents/base.js';
 import { BashAgent } from './agents/bash.js';
-import { ClaudePipedAgent } from './agents/claude-piped.js';
-import { ClaudeInteractiveAgent } from './agents/claude-interactive.js';
+import { ClaudeCodeAgent } from './agents/claudecode.js';
 import { pipelineEvents } from './events.js';
 import { computeUsagePercentages } from './usage.js';
 
@@ -282,15 +281,13 @@ async function runStep(
         result = await bashAgent.run(phase, stepDef, promptPath, model, context);
         break;
       }
-      case 'claude-piped': {
-        const pipedAgent = new ClaudePipedAgent();
-        result = await pipedAgent.run(phase, stepDef, promptPath, model, context);
-        break;
-      }
+      // Legacy aliases kept for backwards compat with existing workflow.yaml files
+      case 'claudecode':
+      case 'claude-piped':
       case 'claude-interactive':
       case 'codex-interactive': {
-        const interactiveAgent = new ClaudeInteractiveAgent();
-        result = await interactiveAgent.run(phase, stepDef, promptPath, model, context);
+        const ccAgent = new ClaudeCodeAgent();
+        result = await ccAgent.run(phase, stepDef, promptPath, model, context);
         break;
       }
       default:

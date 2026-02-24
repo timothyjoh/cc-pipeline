@@ -1,28 +1,25 @@
 import { writeFileSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import { BaseAgent, agentState } from './base.js';
+import { BaseAgent, agentState, AgentContext, AgentResult, StepDef } from './base.js';
 import { generatePrompt } from '../prompts.js';
 import { pipelineEvents } from '../events.js';
 
 /**
- * Claude Piped Agent
- * Runs claude via the Agent SDK query() API for spec, research, plan, review, reflect steps
+ * ClaudeCode Agent
+ * Runs all AI pipeline steps via the Agent SDK query() API.
+ * Handles spec/research/plan/review/reflect (text streaming) and
+ * build/fix (tool-heavy) steps with the same implementation.
  */
-export class ClaudePipedAgent extends BaseAgent {
-  async run(phase: number, step: any, promptPath: string | null, model: string, context: any) {
+export class ClaudeCodeAgent extends BaseAgent {
+  async run(phase: number, step: StepDef, promptPath: string | null, model: string, context: AgentContext): Promise<AgentResult> {
     const { projectDir, config, logFile } = context;
     const pipelineDir = join(projectDir, '.pipeline');
     const outputPath = join(pipelineDir, 'step-output.log');
 
-    // Generate prompt with substitutions
     const promptText = generatePrompt(projectDir, config, phase, promptPath);
+    writeFileSync(join(pipelineDir, 'current-prompt.md'), promptText, 'utf-8');
 
-    // Write prompt to current-prompt.md for inspection
-    const promptFile = join(pipelineDir, 'current-prompt.md');
-    writeFileSync(promptFile, promptText, 'utf-8');
-
-    // Check interrupt before starting
     if (agentState.interrupted) {
       return { exitCode: 130, outputPath };
     }
@@ -31,44 +28,51 @@ export class ClaudePipedAgent extends BaseAgent {
     const onInterrupt = () => controller.abort();
     agentState.on('interrupt', onInterrupt);
 
-    const log = (msg: string) => {
+    // Clear output file so TUI file-tailer sees only this step's content
+    writeFileSync(outputPath, '', 'utf-8');
+
+    const logLine = (msg: string) => {
       if (logFile) {
         try { appendFileSync(logFile, msg + '\n', 'utf-8'); } catch (_) {}
       }
     };
-
-    // Clear output file at start so TUI file-tailer sees only this step's content
-    writeFileSync(outputPath, '', 'utf-8');
+    const appendOutput = (line: string) => {
+      try { appendFileSync(outputPath, line + '\n', 'utf-8'); } catch (_) {}
+    };
 
     const outputChunks: string[] = [];
     let stepCostUSD = 0;
 
     try {
       const queryOptions: any = {
-        maxTurns: 200,
+        maxTurns: 500,
         permissionMode: 'bypassPermissions',
-        // CRITICAL: unset CLAUDECODE to prevent SDK conflict when running inside Claude Code
+        // Unset CLAUDECODE to prevent SDK conflict when running inside Claude Code
         env: { ...process.env, CLAUDECODE: undefined },
         hooks: {
-          SubagentStart: [{ hooks: [async (data: any) => {
-            log(`[sdk] subagent_start agent_id=${data.agent_id ?? ''}`);
-            appendFileSync(outputPath, `[subagent:start] ${data.agent_id ?? ''}\n`, 'utf-8');
-          }] }],
-          SubagentStop: [{ hooks: [async (data: any) => {
-            const msg = data.last_assistant_message ?? '';
-            log(`[sdk] subagent_stop agent_id=${data.agent_id ?? ''} msg=${msg.substring(0, 120)}`);
-            appendFileSync(outputPath, `[subagent:done]  ${data.agent_id ?? ''}\n`, 'utf-8');
-          }] }],
           PreToolUse: [{ hooks: [async (data: any) => {
             const line = `[tool:start] ${data.tool_name} ${JSON.stringify(data.tool_input ?? {}).slice(0, 120)}`;
-            log(line);
-            appendFileSync(outputPath, line + '\n', 'utf-8');
+            logLine(line);
+            appendOutput(line);
           }] }],
           PostToolUse: [{ hooks: [async (data: any) => {
             const success = !data.tool_response?.is_error;
             const line = `[tool:done]  ${data.tool_name} ${success ? '✓' : '✗'}`;
-            log(line);
-            appendFileSync(outputPath, line + '\n', 'utf-8');
+            logLine(line);
+            appendOutput(line);
+          }] }],
+          SubagentStart: [{ hooks: [async (data: any) => {
+            const line = `[subagent:start] ${data.agent_id ?? ''}`;
+            logLine(line);
+            appendOutput(line);
+          }] }],
+          SubagentStop: [{ hooks: [async (data: any) => {
+            const line = `[subagent:done]  ${data.agent_id ?? ''}`;
+            logLine(line);
+            appendOutput(line);
+          }] }],
+          Stop: [{ hooks: [async (_data: any) => {
+            logLine(`[session:stop]`);
           }] }],
         },
       };
@@ -85,29 +89,31 @@ export class ClaudePipedAgent extends BaseAgent {
         if ((event as any).type === 'assistant' && (event as any).message?.role === 'assistant') {
           for (const block of (event as any).message.content ?? []) {
             if ((block as any).type === 'text') {
-              outputChunks.push((block as any).text);
-              // Write text lines to output file in real time for TUI file-tailing
-              const textLines = (block as any).text
+              const text: string = (block as any).text;
+              outputChunks.push(text);
+              // Stream text lines to output file for TUI file-tailing
+              const textLines = text
                 .split('\n')
-                .map((l: string) => l.trim())
-                .filter((l: string) => l.length > 0)
-                .map((l: string) => '[text] ' + l)
+                .map(l => l.trim())
+                .filter(l => l.length > 0)
+                .map(l => '[text] ' + l)
                 .join('\n');
-              if (textLines) appendFileSync(outputPath, textLines + '\n', 'utf-8');
-              pipelineEvents.emit('text:chunk', { phase, step: step.name, text: (block as any).text });
+              if (textLines) appendOutput(textLines);
+              pipelineEvents.emit('text:chunk', { phase, step: step.name, text });
             }
           }
         }
-        // Capture cost from the terminal result event
         if ((event as any).type === 'result') {
           stepCostUSD = (event as any).total_cost_usd ?? 0;
+          const reason = (event as any).stop_reason ?? 'end_turn';
+          pipelineEvents.emit('session:stop', { phase, step: step.name, reason });
         }
       }
     } catch (err: any) {
       agentState.off('interrupt', onInterrupt);
 
       if (agentState.interrupted || controller.signal.aborted) {
-        writeFileSync(outputPath, outputChunks.join('\n'), 'utf-8');
+        appendOutput(outputChunks.join('\n'));
         return { exitCode: 130, outputPath };
       }
 
@@ -118,7 +124,10 @@ export class ClaudePipedAgent extends BaseAgent {
 
     agentState.off('interrupt', onInterrupt);
 
-    writeFileSync(outputPath, outputChunks.join('\n'), 'utf-8');
+    // Write final collected output (for steps without streaming, e.g. build)
+    if (outputChunks.length > 0) {
+      writeFileSync(outputPath, outputChunks.join('\n'), 'utf-8');
+    }
 
     if (agentState.interrupted) {
       return { exitCode: 130, outputPath };
@@ -128,9 +137,6 @@ export class ClaudePipedAgent extends BaseAgent {
   }
 }
 
-/**
- * Factory function for engine.js
- */
-export function createAgent(): ClaudePipedAgent {
-  return new ClaudePipedAgent();
+export function createAgent(): ClaudeCodeAgent {
+  return new ClaudeCodeAgent();
 }
