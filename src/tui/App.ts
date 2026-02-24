@@ -204,7 +204,9 @@ export function App({ events, projectDir }: AppProps) {
       setCurrentModel(d.model ?? '');
       setTextLines([]);
       fileOffsetRef.current = 0;
-      const initialLog: LogEntry[] = d.agent && d.agent !== 'bash'
+      // Only claudecode has hook integrations that feed the structured log.
+      // Other AI agents (codex) and bash stream plain stdout to textLines instead.
+      const initialLog: LogEntry[] = d.agent === 'claudecode'
         ? [{ id: nextId++, kind: 'subagent', tool: 'agent', detail: 'starting...', pending: true }]
         : [];
       setLog(initialLog);
@@ -293,7 +295,9 @@ export function App({ events, projectDir }: AppProps) {
           : null,
 
         // Activity: tool/subagent log for interactive steps, text stream for piped steps
-        ...(log.length > 0
+        ...(log.length === 0 && textLines.length === 0 && currentStep
+          ? [React.createElement(Text, { key: 'pulse', dimColor: true }, 'processing' + '.'.repeat((elapsed % 4) + 1))]
+          : log.length > 0
           ? log.map(entry => {
               const icon = entry.pending ? '·' : entry.success ? '✓' : '✗';
               const iconColor = entry.pending ? undefined : entry.success ? 'green' : 'red';
