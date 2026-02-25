@@ -241,6 +241,7 @@ async function runStep(
   sessionCostUSD: number = 0,
 ): Promise<{ status: string; costUSD: number }> {
   const { name: stepName, agent, skipUnless, output, testGate } = stepDef;
+  const log = (...args: unknown[]) => { if (!options.quiet) console.log(...args); };
 
   // Check skipUnless condition
   if (skipUnless) {
@@ -252,7 +253,7 @@ async function runStep(
         step: stepName,
         reason: `${skipUnless} not found`,
       });
-      console.log(`Skipping ${stepName} (${skipUnless} not found)`);
+      log(`Skipping ${stepName} (${skipUnless} not found)`);
       return { status: 'skipped', costUSD: 0 };
     }
   }
@@ -268,7 +269,7 @@ async function runStep(
   });
   pipelineEvents.emit('step:start', { phase, step: stepName, agent, model });
 
-  console.log(`\nRunning step: ${stepName} (phase ${phase}, agent: ${agent})`);
+  log(`\nRunning step: ${stepName} (phase ${phase}, agent: ${agent})`);
 
   // Route to agent and execute
   let result: any;
@@ -368,13 +369,13 @@ async function runStep(
         step: stepName,
         file: output,
       });
-      console.log(`WARNING: Expected output ${output} not found after ${stepName}`);
+      log(`WARNING: Expected output ${output} not found after ${stepName}`);
     }
   }
 
   // Test gate (placeholder)
   if (testGate === true) {
-    console.log(`  [STUB] Would run test gate for ${stepName}`);
+    log(`  [STUB] Would run test gate for ${stepName}`);
   }
 
   return { status, costUSD: stepCostUSD };
