@@ -35,9 +35,7 @@ export class BashAgent extends BaseAgent {
       agentState.setChild(child);
 
       const onData = (chunk: Buffer) => {
-        const text = chunk.toString();
-        process.stderr.write(text);
-        try { appendFileSync(outputPath, text, 'utf-8'); } catch (_) {}
+        try { appendFileSync(outputPath, chunk.toString(), 'utf-8'); } catch (_) {}
       };
 
       child.stdout?.on('data', onData);
@@ -54,7 +52,6 @@ export class BashAgent extends BaseAgent {
       child.on('error', (err) => {
         agentState.clearChild();
         const msg = `Bash agent error: ${err.message}\n`;
-        process.stderr.write(msg);
         try { appendFileSync(outputPath, msg, 'utf-8'); } catch (_) {}
         resolve({
           exitCode: 1,

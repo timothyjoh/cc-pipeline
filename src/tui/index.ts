@@ -16,7 +16,8 @@ export function launchTUI(projectDir: string): void {
   console.log = (...args: unknown[]) => emit(args);
   console.error = (...args: unknown[]) => emit(args);
 
-  // Intercept process.stderr.write — strip ANSI and route to TUI panel.
+  // Intercept process.stderr.write — strip ANSI and route to TUI panel
+  // so SDK/engine messages don't leak below the Ink layout.
   (process.stderr as any).write = (chunk: any, enc?: any, cb?: any): boolean => {
     const text = (Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk))
       .replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').trim();
@@ -26,36 +27,11 @@ export function launchTUI(projectDir: string): void {
     return true;
   };
 
-  // Save the real stdout write before suppression so Ink can still render.
-  const realStdoutWrite = process.stdout.write.bind(process.stdout);
-
-  // Give Ink a proxy over process.stdout that always uses the real write,
-  // so Ink's rendering is unaffected even after we suppress stdout below.
-  const inkStream = new Proxy(process.stdout, {
-    get(target, prop) {
-      if (prop === 'write') return realStdoutWrite;
-      const val = (target as any)[prop];
-      return typeof val === 'function' ? val.bind(target) : val;
-    },
-  });
-
-  // Suppress direct process.stdout.write — anything the SDK or subprocesses
-  // write to stdout goes nowhere instead of breaking the TUI layout.
-  (process.stdout as any).write = (_chunk: any, enc?: any, cb?: any): boolean => {
-    if (typeof enc === 'function') enc();
-    else if (typeof cb === 'function') cb();
-    return true;
-  };
-
-  render(
-    React.createElement(App, { events: pipelineEvents, projectDir }),
-    { stdout: inkStream as any },
-  );
+  render(React.createElement(App, { events: pipelineEvents, projectDir }));
 
   const restore = () => {
     console.log = origLog;
     console.error = origError;
-    delete (process.stdout as any).write;
     delete (process.stderr as any).write;
   };
   pipelineEvents.once('pipeline:exit', restore);
