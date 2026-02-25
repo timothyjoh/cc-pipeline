@@ -1,12 +1,13 @@
 import { existsSync, cpSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import YAML from 'yaml';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEMPLATES_DIR = join(__dirname, '..', '..', 'templates');
 const PKG = JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf-8'));
 
-export async function update(projectDir) {
+export async function update(projectDir: string) {
   const pipelineDir = join(projectDir, '.pipeline');
 
   if (!existsSync(pipelineDir)) {
@@ -52,11 +53,31 @@ export async function update(projectDir) {
     console.log('  ⚠️  Could not fetch frontend-design skill (offline?) — skipping');
   }
 
+  // Patch workflow.yaml: migrate the commit step to claudecode agent + prompt
+  // without touching any other customizations.
+  const workflowPath = join(pipelineDir, 'workflow.yaml');
+  if (existsSync(workflowPath)) {
+    try {
+      const doc = YAML.parseDocument(readFileSync(workflowPath, 'utf-8'));
+      const steps = doc.get('steps') as YAML.YAMLSeq | undefined;
+      if (steps) {
+        for (const step of steps.items as YAML.YAMLMap[]) {
+          if (step.get('name') === 'commit') {
+            step.set('agent', 'claudecode');
+            step.set('prompt', 'prompts/commit.md');
+            step.set('continue_on_error', true);
+            step.delete('command');
+          }
+        }
+      }
+      writeFileSync(workflowPath, doc.toString(), 'utf-8');
+      console.log('  ✅ Patched .pipeline/workflow.yaml commit step (claudecode agent + prompt)');
+    } catch (e) {
+      console.log('  ⚠️  Could not patch workflow.yaml — update it manually if needed');
+    }
+  }
+
   console.log(`
   ✅ Updated to cc-pipeline v${PKG.version}
-
-  ⚠️  workflow.yaml was NOT changed (your customizations are preserved).
-  If you need the latest default workflow, delete .pipeline/workflow.yaml
-  and run \`cc-pipeline init\` again.
 `);
 }

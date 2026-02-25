@@ -7,10 +7,10 @@ import { init } from './commands/init.js';
 import { update } from './commands/update.js';
 
 // Helper to capture console output (supports async functions)
-async function captureConsole(fn) {
+async function captureConsole(fn: () => Promise<void> | void) {
   const originalLog = console.log;
   const originalError = console.error;
-  const output = [];
+  const output: Array<{ type: string; message: string }> = [];
 
   console.log = (...args) => {
     output.push({ type: 'log', message: args.join(' ') });

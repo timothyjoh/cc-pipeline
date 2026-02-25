@@ -23,16 +23,20 @@ Usage:
 Run options:
   --phases <n>    Number of phases to run (default: unlimited)
   --model <name>  Override model for this run
+  --ui            Launch Ink TUI (default: auto-detect TTY)
+  --no-ui         Force plain output (for CI/pipes)
 
 Examples:
   npx cc-pipeline init
   npx cc-pipeline update
   npx cc-pipeline run --phases 3
+  npx cc-pipeline run --ui
+  npx cc-pipeline run --no-ui
   npx cc-pipeline status
   npx cc-pipeline reset
 `.trim();
 
-export async function run(args) {
+export async function run(args: string[]) {
   const command = args[0];
 
   if (command === '--version' || command === '-v' || command === 'version') {
@@ -51,9 +55,19 @@ export async function run(args) {
     case 'init':
       await init(process.cwd(), options);
       break;
-    case 'run':
-      await runPipeline(process.cwd(), options);
+    case 'run': {
+      const useTUI = options.ui ?? (options.noUi ? false : process.stdout.isTTY);
+      if (useTUI) {
+        const { launchTUI } = await import('./tui/index.js');
+        launchTUI(process.cwd());
+      }
+      await runPipeline(process.cwd(), { ...options, quiet: useTUI });
+      if (useTUI) {
+        const { pipelineEvents } = await import('./events.js');
+        pipelineEvents.emit('pipeline:exit', {});
+      }
       break;
+    }
     case 'status':
       status(process.cwd());
       break;
@@ -70,14 +84,27 @@ export async function run(args) {
   }
 }
 
-function parseOptions(args) {
-  const opts = {};
+export function parseOptions(args: string[]): Record<string, any> {
+  const opts: Record<string, any> = {};
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--phases' && args[i + 1]) {
       opts.phases = parseInt(args[++i], 10);
     } else if (args[i] === '--model' && args[i + 1]) {
       opts.model = args[++i];
+    } else if (args[i] === '--ui') {
+      opts.ui = true;
+    } else if (args[i] === '--no-ui') {
+      opts.noUi = true;
     }
   }
   return opts;
+}
+
+// Bootstrap: auto-invoke when run as a script
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+if (isMain) {
+  run(process.argv.slice(2)).catch(err => {
+    console.error(err.message);
+    process.exit(1);
+  });
 }

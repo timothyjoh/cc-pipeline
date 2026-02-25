@@ -8,7 +8,7 @@ import { dirname } from 'node:path';
  * @param {string} logFile - Path to JSONL log file
  * @param {object} event - Event object (e.g., { event: 'step_start', phase: 1, step: 'spec' })
  */
-export function appendEvent(logFile, event) {
+export function appendEvent(logFile: string, event: Record<string, unknown>) {
   // Ensure directory exists
   const dir = dirname(logFile);
   if (!existsSync(dir)) {
@@ -31,7 +31,7 @@ export function appendEvent(logFile, event) {
  * @param {string} logFile - Path to JSONL log file
  * @returns {Array<object>} Array of event objects
  */
-export function readEvents(logFile) {
+export function readEvents(logFile: string): any[] {
   if (!existsSync(logFile)) {
     return [];
   }
@@ -67,7 +67,7 @@ export function readEvents(logFile) {
  * @param {string} logFile - Path to JSONL log file
  * @returns {object} State object { phase, step, status }
  */
-export function getCurrentState(logFile) {
+export function getCurrentState(logFile: string): { phase: number; step: string; status: string } {
   const events = readEvents(logFile);
 
   if (events.length === 0) {
@@ -116,7 +116,7 @@ export function getCurrentState(logFile) {
  * @param {Array} steps - Array of step objects from config (each has { name: string })
  * @returns {object} Resume point { phase, stepName }
  */
-export function deriveResumePoint(logFile, steps) {
+export function deriveResumePoint(logFile: string, steps: Array<{ name: string }>) {
   const state = getCurrentState(logFile);
   let { phase, step, status } = state;
 
@@ -139,7 +139,7 @@ export function deriveResumePoint(logFile, steps) {
     }
 
     // Find current step index and advance
-    const stepIndex = steps.findIndex(s => s.name === step);
+    const stepIndex = steps.findIndex((s: { name: string }) => s.name === step);
     if (stepIndex === -1) {
       // Unknown step, start from beginning
       return { phase: 1, stepName: steps[0].name };

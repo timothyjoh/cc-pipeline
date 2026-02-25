@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEMPLATES_DIR = join(__dirname, '..', '..', 'templates');
 
-export async function init(projectDir, options = {}) {
+export async function init(projectDir: string, options: Record<string, unknown> = {}) {
   const pipelineDir = join(projectDir, '.pipeline');
   const briefExample = join(projectDir, 'BRIEF.md.example');
   const brief = join(projectDir, 'BRIEF.md');
