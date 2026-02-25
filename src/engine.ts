@@ -267,6 +267,7 @@ async function runStep(
     agent,
     model,
   });
+  const stepStartTime = Date.now();
   pipelineEvents.emit('step:start', { phase, step: stepName, agent, model });
 
   log(`\nRunning step: ${stepName} (phase ${phase}, agent: ${agent})`);
@@ -339,6 +340,7 @@ async function runStep(
     }
   }
 
+  const elapsed_s = Math.round((Date.now() - stepStartTime) / 1000);
   appendEvent(logFile, {
     event: 'step_done',
     phase,
@@ -346,11 +348,12 @@ async function runStep(
     agent,
     status,
     exitCode: result.exitCode,
+    elapsed_s,
     ...(result.error && { error: result.error }),
     ...(description && { description }),
     ...usageFields,
   });
-  pipelineEvents.emit('step:done', { phase, step: stepName, agent, exitCode: result.exitCode });
+  pipelineEvents.emit('step:done', { phase, step: stepName, agent, exitCode: result.exitCode, elapsed_s });
 
   // Validate output if specified
   if (output) {

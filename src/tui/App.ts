@@ -104,12 +104,19 @@ export function App({ events, projectDir }: AppProps) {
   const [textLines, setTextLines] = useState<TextLine[]>([]);
   const [status, setStatus] = useState<'running' | 'done' | 'error'>('running');
   const [elapsed, setElapsed] = useState(0);
+  const [stepElapsed, setStepElapsed] = useState(0);
   const startTime = useState(() => Date.now())[0];
+  const stepStartRef = useRef(0);
   const fileOffsetRef = useRef(0);
   const outputPath = join(projectDir, '.pipeline', 'step-output.log');
 
   useEffect(() => {
-    const tick = setInterval(() => setElapsed(Math.floor((Date.now() - startTime) / 1000)), 1000);
+    const tick = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startTime) / 1000));
+      if (stepStartRef.current > 0) {
+        setStepElapsed(Math.floor((Date.now() - stepStartRef.current) / 1000));
+      }
+    }, 1000);
     return () => clearInterval(tick);
   }, []);
 
@@ -213,6 +220,8 @@ export function App({ events, projectDir }: AppProps) {
       setCurrentModel(d.model ?? '');
       setTextLines([]);
       fileOffsetRef.current = 0;
+      stepStartRef.current = Date.now();
+      setStepElapsed(0);
       // Only claudecode has hook integrations that feed the structured log.
       // Other AI agents (codex) and bash stream plain stdout to textLines instead.
       const initialLog: LogEntry[] = d.agent === 'claudecode'
@@ -254,8 +263,7 @@ export function App({ events, projectDir }: AppProps) {
   }, []);
 
   const statusColor = status === 'running' ? 'blue' : status === 'done' ? 'green' : 'red';
-  const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
-  const secs = String(elapsed % 60).padStart(2, '0');
+  const fmt = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   const stepDescription = currentStep ? stepDescriptions.get(currentStep) ?? '' : '';
 
   return React.createElement(
@@ -268,7 +276,8 @@ export function App({ events, projectDir }: AppProps) {
         Box, {},
         React.createElement(Text, { bold: true }, 'cc-pipeline '),
         React.createElement(Text, { color: 'cyan' }, `phase ${currentPhase} · ${currentStep} `),
-        React.createElement(Text, { dimColor: true }, `${mins}:${secs}`)
+        React.createElement(Text, { dimColor: true }, fmt(stepElapsed)),
+        React.createElement(Text, { dimColor: true }, `  total ${fmt(elapsed)}`)
       ),
       phaseDescription
         ? React.createElement(Text, { dimColor: true }, phaseDescription)
