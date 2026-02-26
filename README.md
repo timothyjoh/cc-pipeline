@@ -17,10 +17,6 @@ Think of it as a CI/CD system for AI-driven development—but instead of deployi
 
 - **Node.js** >=18
 - **Claude CLI** (`claude`) installed and configured ([get it here](https://docs.claude.ai/docs/claude-cli))
-- **tmux** — Required for interactive build/fix steps (Claude runs inside tmux sessions)
-  - macOS: `brew install tmux`
-  - Ubuntu/Debian: `sudo apt install tmux`
-  - Fedora: `sudo dnf install tmux`
 - **git** — For the commit step (you probably already have this)
 
 ## Installation
@@ -63,21 +59,11 @@ one-at-a-time to build a good brief.
 
 ### 3. Run the pipeline
 
-> **⚠️ Run from a regular terminal, not from inside Claude Code.** The pipeline spawns its own Claude Code sessions in tmux, so running it from within Claude Code would nest sessions — which isn't supported.
-
 ```bash
 npx cc-pipeline run
 ```
 
-That's it. The pipeline will spec, build, review, fix, and commit each phase automatically.
-
-### 4. Monitor progress
-
-```bash
-npx cc-pipeline status
-```
-
-The pipeline also generates a `STATUS.md` at the project root after each phase — a running summary of what's been built, review findings, test coverage, and what's next.
+The TUI launches automatically in a terminal, showing live step progress, agent activity, and per-step timers. That's it — the pipeline will spec, build, review, fix, and commit each phase automatically.
 
 ## Commands
 
@@ -85,7 +71,7 @@ The pipeline also generates a `STATUS.md` at the project root after each phase �
 |---------|-------------|
 | `npx cc-pipeline@latest init` | Scaffold `.pipeline/`, `CLAUDE.md`, and `BRIEF.md.example` |
 | `npx cc-pipeline@latest update` | Refresh prompts and docs (preserves your `workflow.yaml`) |
-| `npx cc-pipeline run [--phases N] [--model NAME]` | Run the pipeline |
+| `npx cc-pipeline run [options]` | Run the pipeline |
 | `npx cc-pipeline status` | Show current phase, step, and recent events |
 | `npx cc-pipeline reset` | Clear event log, phase outputs, and STATUS.md |
 
@@ -95,13 +81,16 @@ The pipeline also generates a `STATUS.md` at the project root after each phase �
 
 - `--phases <n>` — Limit to N phases (useful for testing)
 - `--model <name>` — Override model for all steps (e.g., `opus`, `sonnet`, `haiku`)
+- `--ui` — Force TUI on (default: auto-detects TTY)
+- `--no-ui` — Plain log output, no TUI (useful for CI/pipes)
 
 ### Examples
 
 ```bash
-npx cc-pipeline run                  # Run until complete
+npx cc-pipeline run                  # Run until complete (TUI auto-enabled)
 npx cc-pipeline run --phases 3       # Run just 3 phases
 npx cc-pipeline run --model opus     # Use opus for all steps
+npx cc-pipeline run --no-ui          # Plain output, no TUI
 npx cc-pipeline reset                # Start over from scratch
 ```
 
@@ -120,7 +109,7 @@ Each phase runs through these steps (defined in `.pipeline/workflow.yaml`):
 1. **spec** — Break the project vision into a phase spec
 2. **research** — Analyze the current codebase state
 3. **plan** — Create an actionable implementation plan
-4. **build** — Implement the plan (interactive Claude in tmux)
+4. **build** — Implement the plan
 5. **review** — Staff engineer-level code review
 6. **fix** — Address review findings (skipped if none)
 7. **reflect** — Look back at progress, plan the next phase
@@ -131,9 +120,9 @@ Each phase runs through these steps (defined in `.pipeline/workflow.yaml`):
 
 | Agent | How It Runs | Used For |
 |-------|------------|----------|
-| `claude-piped` | `claude -p "<prompt>"` (non-interactive) | Planning, analysis, reviews, docs |
-| `claude-interactive` | Claude in a tmux session with full tool access | Building code, fixing issues |
-| `bash` | Direct shell command | Git commits, scripts |
+| `claudecode` | Claude Agent SDK (in-process) | All AI steps by default |
+| `codex` | OpenAI Codex CLI (`codex exec --yolo`) | Alternative for build/fix |
+| `bash` | Direct shell command | Scripts, git operations |
 
 ### State & Resume
 
@@ -152,16 +141,24 @@ Pipeline behavior is controlled by `.pipeline/workflow.yaml`. See `.pipeline/CLA
 **Override model per step:**
 ```yaml
 steps:
-  - name: spec
-    agent: claude-piped
-    model: sonnet
-    prompt: prompts/spec.md
+  - name: build
+    agent: claudecode
+    model: claude-opus-4-5
+    prompt: prompts/build.md
+```
+
+**Use Codex for build/fix:**
+```yaml
+  - name: build
+    agent: codex
+    model: o4-mini
+    prompt: prompts/build.md
 ```
 
 **Add conditional execution:**
 ```yaml
   - name: fix
-    agent: claude-interactive
+    agent: claudecode
     prompt: prompts/fix.md
     skip_unless: "MUST-FIX.md"    # Only runs if review produced MUST-FIX.md
 ```
@@ -235,18 +232,14 @@ your-project/
 
 ## Troubleshooting
 
-**"Claude Code cannot be launched inside another Claude Code session":**
-- Run the pipeline from a regular terminal, not from within Claude Code
-- If you still see this after exiting Claude Code, run: `unset CLAUDECODE` then try again
-
-**Build step times out (60s+):**
-- Check [Anthropic's status page](https://status.anthropic.com) — API issues cause slow startups
-- The pipeline will retry on resume: just run `npx cc-pipeline run` again
-
 **Pipeline won't start:**
 - Ensure `claude` CLI is installed: `claude --version`
-- Ensure `tmux` is installed: `tmux -V`
 - Run `npx cc-pipeline@latest init` if `.pipeline/` doesn't exist
+
+**Step times out or hangs:**
+- Check [Anthropic's status page](https://status.anthropic.com) — API issues cause slow startups
+- The pipeline resumes automatically: press Ctrl-C and run `npx cc-pipeline run` again
+- For codex steps, an inactivity timeout (5 min of no output) will automatically retry up to 3 times
 
 **Want to start over:**
 ```bash
