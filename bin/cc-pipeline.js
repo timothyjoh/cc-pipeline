@@ -1,13 +1,28 @@
 #!/usr/bin/env node
-// Register tsx as an in-process ESM loader, then import and run the TypeScript CLI
-// directly in this process. This keeps everything single-process so signal handlers
-// registered by the engine work correctly (no subprocess forwarding needed).
-import { register } from 'node:module';
-import { pathToFileURL } from 'node:url';
+// tsx v4+ requires --import, not the loader hooks API.
+// Spawn node with --import tsx/esm, resolving tsx relative to this package
+// so it works regardless of npm hoisting.
+import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { dirname, join } from 'node:path';
 
-// tsx/esm is the public loader API (works across tsx versions and npm hoisting)
-register('tsx/esm', pathToFileURL('./'));
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 
-// Now TypeScript imports resolve correctly in this process
-const { run } = await import('../src/cli.ts');
-await run(process.argv.slice(2));
+const tsxEsm = pathToFileURL(require.resolve('tsx/esm')).href;
+const cli = join(__dirname, '../src/cli.ts');
+
+const child = spawn(
+  process.execPath,
+  ['--import', tsxEsm, cli, ...process.argv.slice(2)],
+  { stdio: 'inherit' }
+);
+
+// SIGINT is broadcast to the whole process group on Ctrl-C, but SIGTERM is not.
+process.on('SIGTERM', () => child.kill('SIGTERM'));
+
+child.on('exit', (code, signal) => {
+  if (signal) process.kill(process.pid, signal);
+  else process.exit(code ?? 0);
+});
