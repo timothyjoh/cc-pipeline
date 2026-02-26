@@ -1,11 +1,16 @@
 {
   "name": "cc-pipeline",
-  "version": "0.5.3",
+  "version": "0.6.0",
   "description": "Autonomous Claude Code pipeline engine. Install into any repo, write a BRIEF.md, and let Claude build your project phase by phase.",
   "type": "module",
   "bin": {
     "cc-pipeline": "bin/cc-pipeline.js"
   },
+  "files": [
+    "bin/",
+    "src/",
+    "templates/"
+  ],
   "scripts": {
     "start": "tsx src/cli.ts",
     "test": "node --import tsx/esm --test 'src/**/*.test.ts'",
@@ -36,13 +41,13 @@
     "@anthropic-ai/claude-agent-sdk": "^0.2.50",
     "ink": "^6.8.0",
     "react": "^19.2.4",
+    "tsx": "^4.21.0",
     "yaml": "^2.7.0"
   },
   "devDependencies": {
     "@types/node": "^25.3.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
 }
