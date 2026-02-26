@@ -2,15 +2,12 @@
 // Register tsx as an in-process ESM loader, then import and run the TypeScript CLI
 // directly in this process. This keeps everything single-process so signal handlers
 // registered by the engine work correctly (no subprocess forwarding needed).
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
 // Load tsx's programmatic ESM registration API
-const { register } = await import(
-  join(__dirname, '../node_modules/tsx/dist/esm/api/index.mjs')
-);
+// Use createRequire to resolve tsx relative to this package (handles hoisted deps)
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const tsxApiPath = require.resolve('tsx/dist/esm/api/index.mjs');
+const { register } = await import(tsxApiPath);
 register();
 
 // Now TypeScript imports resolve correctly in this process
