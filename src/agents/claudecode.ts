@@ -47,7 +47,8 @@ export class ClaudeCodeAgent extends BaseAgent {
 
     const appendOutput = (line: string) => {
       try {
-        appendFileSync(outputPath, line + '\n', 'utf-8');
+        const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        appendFileSync(outputPath, `[${ts}] ${line}\n`, 'utf-8');
         lastActivityMs = Date.now();
       } catch (_) {}
     };
