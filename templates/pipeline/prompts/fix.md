@@ -42,17 +42,17 @@ For 1-2 simple fixes, just do them yourself — no need for a team.
 
 ## Output
 
-After all fixes are applied and tests pass, update `docs/phases/phase-{{PHASE}}/MUST-FIX.md` by marking each task as done:
+After all fixes are applied and tests pass, update `docs/phases/phase-{{PHASE}}/MUST-FIX.md` by checking off each completed task and appending a status line:
 
 ```markdown
-### Task 1: [title]
-**Status:** ✅ Fixed
-**What was done:** [Brief description of the actual fix]
+- [x] ### Task 1: [title]
+  **Status:** ✅ Fixed
+  **What was done:** [Brief description of the actual fix]
 ```
 
-If you cannot fix something, mark it:
+If you cannot fix something, check it off anyway and mark it failed:
 ```markdown
-### Task N: [title]
-**Status:** ❌ Could not fix
-**Reason:** [Why]
+- [x] ### Task N: [title]
+  **Status:** ❌ Could not fix
+  **Reason:** [Why]
 ```

@@ -90,15 +90,15 @@ This document is handed directly to a build agent. Write it like a PLAN — acti
 
 ## Tasks
 
-### Task 1: [Short title]
-**Priority:** Critical / Minor
-**Files:** `path/to/file.ts`
-**Problem:** [What's wrong — be specific, include line numbers]
-**Fix:** [Exactly what to do — step by step]
-**Verify:** [How to confirm the fix works]
+- [ ] ### Task 1: [Short title]
+  **Priority:** Critical / Minor
+  **Files:** `path/to/file.ts`
+  **Problem:** [What's wrong — be specific, include line numbers]
+  **Fix:** [Exactly what to do — step by step]
+  **Verify:** [How to confirm the fix works]
 
-### Task 2: [Short title]
-...
+- [ ] ### Task 2: [Short title]
+  ...
 ```
 
 **Rules for MUST-FIX.md:**
