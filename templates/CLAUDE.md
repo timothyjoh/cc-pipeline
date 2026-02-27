@@ -62,6 +62,37 @@ Phase outputs are saved to `docs/phases/phase-N/`.
 
 The pipeline stops automatically when the project is complete (`PROJECT COMPLETE` in REFLECTIONS.md).
 
+## Adding New Epics
+
+The pipeline works through `docs/epics/` one Epic at a time. When all Epics are
+complete the pipeline stops. To continue development, add a new Epic and run again.
+
+**Epic files** live at `docs/epics/epic-N.md` where N is the next number in sequence.
+Check what exists and increment: if `epic-3.md` is the last one, create `epic-4.md`.
+
+**Minimum viable Epic** — the pipeline's groom step will fill in research and detail,
+so you only need to provide intent:
+
+```markdown
+# Epic N: [Short name]
+
+## Goal
+[One paragraph: what the user can do when this Epic is complete.
+ Must be user-testable — a real capability, not an infrastructure layer.]
+
+## Acceptance Criteria
+- [ ] [Specific, observable thing a user can do or see]
+- [ ] [Another testable outcome]
+```
+
+**Rules for good Epics:**
+- Each Epic is a vertical slice — the user can test and get value from it independently
+- Avoid infrastructure Epics ("set up the database", "add an API layer") — frame around user actions instead
+- Size them to feel like 2–4 phases of work; the groom step will flag if it seems too large
+- One Epic at a time is fine — you don't need to plan the whole future upfront
+
+Once the file exists, just run `npx cc-pipeline run` and the pipeline picks it up automatically.
+
 ## Customizing the Pipeline
 
 See `.pipeline/CLAUDE.md` for full configuration docs — how to edit workflow steps, change agents/models, customize prompts, and add new steps.

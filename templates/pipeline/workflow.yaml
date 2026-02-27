@@ -15,6 +15,12 @@ version: 1
 phases_dir: "docs/phases"
 
 steps:
+  - name: groom
+    description: "Bootstrap or groom the next Epic"
+    agent: claudecode
+    prompt: prompts/groom.md
+    output: "GROOM.md"
+
   - name: spec
     description: "Break project vision into phase spec"
     agent: claudecode
@@ -60,10 +66,16 @@ steps:
     test_gate: true
 
   - name: reflect
-    description: "Look back + look forward for next phase"
+    description: "Look back at what happened this phase"
     agent: claudecode
     prompt: prompts/reflect.md
     output: "REFLECTIONS.md"
+
+  - name: next
+    description: "Write steering pointer for next phase"
+    agent: claudecode
+    prompt: prompts/next.md
+    output: "NEXT.md"
 
   - name: status
     description: "Update STATUS.md with phase summary"

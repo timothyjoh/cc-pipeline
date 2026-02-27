@@ -111,20 +111,6 @@ export async function runEngine(projectDir: string, options: any = {}) {
     const phaseLimit = options.phases || 0;
 
     while (phase <= MAX_PHASES) {
-      // Check for PROJECT COMPLETE
-      if (phase > 1) {
-        const prevPhaseDir = join(projectDir, config.phasesDir, `phase-${phase - 1}`);
-        const reflectFile = join(prevPhaseDir, 'REFLECTIONS.md');
-        if (existsSync(reflectFile)) {
-          const firstLine = readFileSync(reflectFile, 'utf8').split('\n')[0];
-          if (firstLine && /PROJECT COMPLETE/i.test(firstLine)) {
-            appendEvent(logFile, { event: 'project_complete', phase: phase - 1 });
-            log(`PROJECT COMPLETE detected in phase ${phase - 1} reflections.`);
-            return;
-          }
-        }
-      }
-
       pipelineEvents.emit('phase:start', { phase });
 
       // Execute all steps in phase
@@ -176,6 +162,20 @@ export async function runEngine(projectDir: string, options: any = {}) {
               step: stepDef.name,
               attempt: attempt + 1,
             });
+          }
+        }
+
+        // After GROOM step: check if it signaled project complete
+        if (stepDef.name === 'groom' && lastResult === 'ok') {
+          const groomFile = join(projectDir, config.phasesDir, `phase-${phase}`, 'GROOM.md');
+          if (existsSync(groomFile)) {
+            const groomContent = readFileSync(groomFile, 'utf8');
+            if (/PROJECT COMPLETE/i.test(groomContent)) {
+              appendEvent(logFile, { event: 'project_complete', phase });
+              log(`PROJECT COMPLETE — all Epics finished (detected by GROOM in phase ${phase}).`);
+              pipelineEvents.emit('phase:done', { phase });
+              return;
+            }
           }
         }
 
