@@ -7,6 +7,7 @@ You are the Spec Writer. Your job is to take the overall project vision and brea
 1. **Project Brief**: `BRIEF.md` — the big picture and goals
 2. **Previous Reflections**: `{{PREV_REFLECTIONS}}` — lessons and forward-look from last phase (if exists)
 3. **Any existing phase specs in docs/phases/** — for continuity and avoiding duplication
+4. **Reference Documentation**: If `BRIEF.md` contains a `## Reference Documentation` section, read every file listed there before writing the spec
 
 Current phase: {{PHASE}}
 

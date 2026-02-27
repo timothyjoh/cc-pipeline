@@ -31,3 +31,11 @@
 ## Definition of Done
 <!-- How many phases? When is the project complete? -->
 <!-- Example: "~4 phases for MVP, complete when all features above work with tests passing" -->
+
+## Reference Documentation
+<!-- Paths to any local documentation, API references, or research you've downloaded. -->
+<!-- The pipeline will read these during spec and research phases. -->
+<!-- Examples: -->
+<!--   - `docs/stripe-api.md` — Stripe Payments API reference -->
+<!--   - `docs/shadcn-components.md` — Available shadcn/ui components and usage -->
+<!--   - `docs/architecture-decision.md` — ADR for chosen approach -->
