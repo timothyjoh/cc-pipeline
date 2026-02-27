@@ -1,5 +1,5 @@
 import { spawn, ChildProcess } from 'node:child_process';
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { BaseAgent, agentState, AgentContext, AgentResult, StepDef } from './base.js';
 import { generatePrompt } from '../prompts.js';
@@ -25,7 +25,9 @@ export class CodexAgent extends BaseAgent {
   async run(phase: number, step: StepDef, promptPath: string | null, model: string, context: AgentContext): Promise<AgentResult> {
     const { projectDir } = context;
     const pipelineDir = join(projectDir, '.pipeline');
-    const outputPath = join(pipelineDir, 'step-output.log');
+    const logDir = join(pipelineDir, 'logs', `phase-${phase}`);
+    mkdirSync(logDir, { recursive: true });
+    const outputPath = join(logDir, `step-${step.name}.log`);
 
     const promptText = generatePrompt(projectDir, context.config, phase, promptPath);
     writeFileSync(join(pipelineDir, 'current-prompt.md'), promptText, 'utf-8');

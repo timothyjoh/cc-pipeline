@@ -108,7 +108,7 @@ export function App({ events, projectDir }: AppProps) {
   const startTime = useState(() => Date.now())[0];
   const stepStartRef = useRef(0);
   const fileOffsetRef = useRef(0);
-  const outputPath = join(projectDir, '.pipeline', 'step-output.log');
+  const outputPathRef = useRef('');
 
   useEffect(() => {
     const tick = setInterval(() => {
@@ -125,16 +125,15 @@ export function App({ events, projectDir }: AppProps) {
     setPhaseDescription(loadPhaseDescription(projectDir, phasesDir, currentPhase));
   }, [currentPhase]);
 
-  // Poll step-output.log for real-time activity from agents.
+  // Poll the per-step log file for real-time activity from agents.
   // Hooks inside the Agent SDK query() run in a worker context and can't emit
   // to this process's EventEmitter, so we use file-based IPC instead.
   useEffect(() => {
     const poll = () => {
       try {
-        if (!existsSync(outputPath)) return;
+        const outputPath = outputPathRef.current;
+        if (!outputPath || !existsSync(outputPath)) return;
         const stat = statSync(outputPath);
-        // File was truncated (new step started) — reset
-        if (stat.size < fileOffsetRef.current) fileOffsetRef.current = 0;
         if (stat.size === fileOffsetRef.current) return;
 
         // Read only new bytes — avoids loading the whole file each tick
@@ -219,6 +218,7 @@ export function App({ events, projectDir }: AppProps) {
       setCurrentAgent(d.agent ?? '');
       setCurrentModel(d.model ?? '');
       setTextLines([]);
+      outputPathRef.current = join(projectDir, '.pipeline', 'logs', `phase-${d.phase}`, `step-${d.step}.log`);
       fileOffsetRef.current = 0;
       stepStartRef.current = Date.now();
       setStepElapsed(0);

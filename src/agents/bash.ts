@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { BaseAgent, agentState, AgentContext, AgentResult, StepDef } from './base.js';
 
@@ -20,7 +20,9 @@ export class BashAgent extends BaseAgent {
 
     console.log(`  Executing: ${cmd}`);
 
-    const outputPath = join(context.projectDir, '.pipeline', 'step-output.log');
+    const logDir = join(context.projectDir, '.pipeline', 'logs', `phase-${phase}`);
+    mkdirSync(logDir, { recursive: true });
+    const outputPath = join(logDir, `step-${step.name}.log`);
     writeFileSync(outputPath, `$ ${cmd}\n`, 'utf-8');
 
     return new Promise((resolve) => {

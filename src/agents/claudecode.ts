@@ -1,4 +1,4 @@
-import { writeFileSync, appendFileSync } from 'node:fs';
+import { writeFileSync, appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { BaseAgent, agentState, AgentContext, AgentResult, StepDef } from './base.js';
@@ -13,9 +13,11 @@ import { pipelineEvents } from '../events.js';
  */
 export class ClaudeCodeAgent extends BaseAgent {
   async run(phase: number, step: StepDef, promptPath: string | null, model: string, context: AgentContext): Promise<AgentResult> {
-    const { projectDir, config, logFile } = context;
+    const { projectDir, config } = context;
     const pipelineDir = join(projectDir, '.pipeline');
-    const outputPath = join(pipelineDir, 'step-output.log');
+    const logDir = join(pipelineDir, 'logs', `phase-${phase}`);
+    mkdirSync(logDir, { recursive: true });
+    const outputPath = join(logDir, `step-${step.name}.log`);
 
     const promptText = generatePrompt(projectDir, config, phase, promptPath);
     writeFileSync(join(pipelineDir, 'current-prompt.md'), promptText, 'utf-8');
@@ -31,11 +33,6 @@ export class ClaudeCodeAgent extends BaseAgent {
     // Clear output file so TUI file-tailer sees only this step's content
     writeFileSync(outputPath, '', 'utf-8');
 
-    const logLine = (msg: string) => {
-      if (logFile) {
-        try { appendFileSync(logFile, msg + '\n', 'utf-8'); } catch (_) {}
-      }
-    };
     const appendOutput = (line: string) => {
       try { appendFileSync(outputPath, line + '\n', 'utf-8'); } catch (_) {}
     };
@@ -51,29 +48,19 @@ export class ClaudeCodeAgent extends BaseAgent {
         env: { ...process.env, CLAUDECODE: undefined },
         hooks: {
           PreToolUse: [{ hooks: [async (data: any) => {
-            const line = `[tool:start] ${data.tool_name} ${JSON.stringify(data.tool_input ?? {}).slice(0, 120)}`;
-            logLine(line);
-            appendOutput(line);
+            appendOutput(`[tool:start] ${data.tool_name} ${JSON.stringify(data.tool_input ?? {}).slice(0, 120)}`);
           }] }],
           PostToolUse: [{ hooks: [async (data: any) => {
             const success = !data.tool_response?.is_error;
-            const line = `[tool:done]  ${data.tool_name} ${success ? '✓' : '✗'}`;
-            logLine(line);
-            appendOutput(line);
+            appendOutput(`[tool:done]  ${data.tool_name} ${success ? '✓' : '✗'}`);
           }] }],
           SubagentStart: [{ hooks: [async (data: any) => {
-            const line = `[subagent:start] ${data.agent_id ?? ''}`;
-            logLine(line);
-            appendOutput(line);
+            appendOutput(`[subagent:start] ${data.agent_id ?? ''}`);
           }] }],
           SubagentStop: [{ hooks: [async (data: any) => {
-            const line = `[subagent:done]  ${data.agent_id ?? ''}`;
-            logLine(line);
-            appendOutput(line);
+            appendOutput(`[subagent:done]  ${data.agent_id ?? ''}`);
           }] }],
-          Stop: [{ hooks: [async (_data: any) => {
-            logLine(`[session:stop]`);
-          }] }],
+          Stop: [{ hooks: [async (_data: any) => {}] }],
         },
       };
 
