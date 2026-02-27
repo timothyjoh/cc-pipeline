@@ -193,7 +193,7 @@ test('ClaudeCodeAgent: hooks write tool:start and tool:done to output file', asy
   const agent = new ClaudeCodeAgent();
   await agent.run(PHASE, STEP, PROMPT_PATH, 'default', makeContext(projectDir));
 
-  const output = readFileSync(join(projectDir, '.pipeline', 'step-output.log'), 'utf-8');
+  const output = readFileSync(join(projectDir, '.pipeline', 'logs', 'phase-1', 'step-build.log'), 'utf-8');
   assert.ok(output.includes('[tool:start] Read'), 'output should contain tool:start line');
   assert.ok(output.includes('[tool:done]  Read ✓'), 'output should contain tool:done line');
 
@@ -247,6 +247,132 @@ test('CLI: useTUI logic — --ui always launches TUI', async () => {
   const source = readFileSync(pathJoin(__dir, 'cli.ts'), 'utf8');
   assert.ok(source.includes('options.ui ?? (options.noUi ? false : process.stdout.isTTY)'),
     'should compute useTUI based on flags and TTY');
+});
+
+// ─── Watchdog tests ───────────────────────────────────────────────────────────
+
+test('ClaudeCodeAgent watchdog: fires after idle threshold, returns exitCode 1', async () => {
+  if (typeof mock.module !== 'function') return;
+
+  const projectDir = setupTempProject();
+
+  // Query that hangs indefinitely (never yields, never writes to log)
+  async function* hangingQuery() {
+    await new Promise(resolve => setTimeout(resolve, 30_000));
+    yield ASSISTANT_EVENT;
+  }
+
+  mock.module('@anthropic-ai/claude-agent-sdk', {
+    namedExports: { query: hangingQuery },
+  });
+
+  const { ClaudeCodeAgent } = await import('./agents/claudecode.js');
+  const agent = new ClaudeCodeAgent();
+
+  // Use a very short idle timeout so the test completes quickly
+  const step = { ...STEP, idleTimeoutMs: 200 };
+  const result = await agent.run(PHASE, step, PROMPT_PATH, 'default', makeContext(projectDir));
+
+  assert.strictEqual(result.exitCode, 1, 'watchdog should return exitCode 1');
+  const log = readFileSync(result.outputPath!, 'utf-8');
+  assert.ok(log.includes('[watchdog]'), 'log should contain watchdog message');
+
+  mock.restoreAll();
+  rmSync(projectDir, { recursive: true, force: true });
+});
+
+test('ClaudeCodeAgent watchdog: writes watchdog_timeout event to logFile', async () => {
+  if (typeof mock.module !== 'function') return;
+
+  const projectDir = setupTempProject();
+  const logFile = join(projectDir, '.pipeline', 'pipeline.jsonl');
+
+  async function* hangingQuery() {
+    await new Promise(resolve => setTimeout(resolve, 30_000));
+    yield ASSISTANT_EVENT;
+  }
+
+  mock.module('@anthropic-ai/claude-agent-sdk', {
+    namedExports: { query: hangingQuery },
+  });
+
+  const { ClaudeCodeAgent } = await import('./agents/claudecode.js');
+  const agent = new ClaudeCodeAgent();
+
+  const step = { ...STEP, idleTimeoutMs: 200 };
+  const context = { ...makeContext(projectDir), logFile };
+  await agent.run(PHASE, step, PROMPT_PATH, 'default', context);
+
+  const logContent = readFileSync(logFile, 'utf-8');
+  const events = logContent.trim().split('\n').map(l => JSON.parse(l));
+  const watchdogEvent = events.find((e: any) => e.event === 'watchdog_timeout');
+  assert.ok(watchdogEvent, 'watchdog_timeout event should be written to logFile');
+  assert.strictEqual(watchdogEvent.step, 'build');
+  assert.strictEqual(watchdogEvent.phase, 1);
+  assert.ok(typeof watchdogEvent.idle_ms === 'number', 'idle_ms should be a number');
+
+  mock.restoreAll();
+  rmSync(projectDir, { recursive: true, force: true });
+});
+
+test('ClaudeCodeAgent watchdog: does NOT fire when query completes normally', async () => {
+  if (typeof mock.module !== 'function') return;
+
+  const projectDir = setupTempProject();
+
+  mock.module('@anthropic-ai/claude-agent-sdk', {
+    namedExports: {
+      query: (_opts: any) => eventsFrom([ASSISTANT_EVENT]),
+    },
+  });
+
+  const { ClaudeCodeAgent } = await import('./agents/claudecode.js');
+  const agent = new ClaudeCodeAgent();
+
+  // Very short timeout — query completes before it could fire
+  const step = { ...STEP, idleTimeoutMs: 200 };
+  const result = await agent.run(PHASE, step, PROMPT_PATH, 'default', makeContext(projectDir));
+
+  assert.strictEqual(result.exitCode, 0, 'normal completion should still return exitCode 0');
+  const log = readFileSync(result.outputPath!, 'utf-8');
+  assert.ok(!log.includes('[watchdog]'), 'log should NOT contain watchdog message');
+
+  mock.restoreAll();
+  rmSync(projectDir, { recursive: true, force: true });
+});
+
+test('ClaudeCodeAgent watchdog: activity resets timer, preventing premature abort', async () => {
+  if (typeof mock.module !== 'function') return;
+
+  const projectDir = setupTempProject();
+
+  // Query that emits tool events at 60ms intervals for 5 turns, well within 500ms timeout
+  mock.module('@anthropic-ai/claude-agent-sdk', {
+    namedExports: {
+      query: async function* ({ options }: any) {
+        for (let i = 0; i < 5; i++) {
+          await new Promise(resolve => setTimeout(resolve, 60));
+          // Fire a hook to trigger appendOutput → update lastActivityMs
+          await options.hooks.PreToolUse[0].hooks[0]({ tool_name: 'Read', tool_input: {} });
+          await options.hooks.PostToolUse[0].hooks[0]({ tool_name: 'Read', tool_response: { is_error: false } });
+        }
+        yield ASSISTANT_EVENT;
+      },
+    },
+  });
+
+  const { ClaudeCodeAgent } = await import('./agents/claudecode.js');
+  const agent = new ClaudeCodeAgent();
+
+  const step = { ...STEP, idleTimeoutMs: 500 };
+  const result = await agent.run(PHASE, step, PROMPT_PATH, 'default', makeContext(projectDir));
+
+  assert.strictEqual(result.exitCode, 0, 'active query should complete successfully');
+  const log = readFileSync(result.outputPath!, 'utf-8');
+  assert.ok(!log.includes('[watchdog]'), 'log should NOT contain watchdog message when active');
+
+  mock.restoreAll();
+  rmSync(projectDir, { recursive: true, force: true });
 });
 
 test('CLI: useTUI logic — unit test the expression', () => {

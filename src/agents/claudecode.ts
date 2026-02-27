@@ -4,12 +4,18 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import { BaseAgent, agentState, AgentContext, AgentResult, StepDef } from './base.js';
 import { generatePrompt } from '../prompts.js';
 import { pipelineEvents } from '../events.js';
+import { appendEvent } from '../state.js';
+
+const DEFAULT_IDLE_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
 
 /**
  * ClaudeCode Agent
  * Runs all AI pipeline steps via the Agent SDK query() API.
  * Handles spec/research/plan/review/reflect (text streaming) and
  * build/fix (tool-heavy) steps with the same implementation.
+ *
+ * Watchdog: if no writes to the step log occur for idleTimeoutMs, the query
+ * is aborted and exitCode 1 is returned so the engine retry logic kicks in.
  */
 export class ClaudeCodeAgent extends BaseAgent {
   async run(phase: number, step: StepDef, promptPath: string | null, model: string, context: AgentContext): Promise<AgentResult> {
@@ -33,9 +39,38 @@ export class ClaudeCodeAgent extends BaseAgent {
     // Clear output file so TUI file-tailer sees only this step's content
     writeFileSync(outputPath, '', 'utf-8');
 
+    // Watchdog: tracks time of last write to outputPath
+    const idleTimeoutMs = step.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
+    const watchdogIntervalMs = Math.min(60_000, Math.ceil(idleTimeoutMs / 3));
+    let lastActivityMs = Date.now();
+    let watchdogFired = false;
+
     const appendOutput = (line: string) => {
-      try { appendFileSync(outputPath, line + '\n', 'utf-8'); } catch (_) {}
+      try {
+        appendFileSync(outputPath, line + '\n', 'utf-8');
+        lastActivityMs = Date.now();
+      } catch (_) {}
     };
+
+    const watchdog = setInterval(() => {
+      const idleMs = Date.now() - lastActivityMs;
+      if (idleMs >= idleTimeoutMs) {
+        const idleMin = Math.round(idleMs / 60_000);
+        appendOutput(`[watchdog] idle ${idleMin}m — aborting`);
+        if (context.logFile) {
+          try {
+            appendEvent(context.logFile, {
+              event: 'watchdog_timeout',
+              phase,
+              step: step.name,
+              idle_ms: idleMs,
+            });
+          } catch (_) {}
+        }
+        watchdogFired = true;
+        controller.abort();
+      }
+    }, watchdogIntervalMs);
 
     const outputChunks: string[] = [];
     let stepCostUSD = 0;
@@ -97,19 +132,23 @@ export class ClaudeCodeAgent extends BaseAgent {
         }
       }
     } catch (err: any) {
-      agentState.off('interrupt', onInterrupt);
-
-      if (agentState.interrupted || controller.signal.aborted) {
+      if (agentState.interrupted) {
         appendOutput(outputChunks.join('\n'));
         return { exitCode: 130, outputPath };
+      }
+
+      if (watchdogFired) {
+        // appendOutput already wrote the watchdog message; return error for retry
+        return { exitCode: 1, outputPath };
       }
 
       const errorText = `Error: ${err.message}\n${err.stack ?? ''}`;
       writeFileSync(outputPath, errorText, 'utf-8');
       return { exitCode: 1, outputPath };
+    } finally {
+      clearInterval(watchdog);
+      agentState.off('interrupt', onInterrupt);
     }
-
-    agentState.off('interrupt', onInterrupt);
 
     // Write final collected output (for steps without streaming, e.g. build)
     if (outputChunks.length > 0) {

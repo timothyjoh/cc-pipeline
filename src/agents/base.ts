@@ -24,6 +24,8 @@ export interface StepDef {
   testGate?: boolean;
   description?: string;
   continueOnError?: boolean;
+  /** Milliseconds of log-file inactivity before the watchdog aborts the step. Default: 20 minutes. */
+  idleTimeoutMs?: number;
 }
 
 /**
