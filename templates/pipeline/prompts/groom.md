@@ -56,9 +56,6 @@ Phases then break the Epic into even smaller implementation steps — "draw the
 container", "populate it with data", "wire up the interaction" — each one a
 focused build task within the Epic's visible slice.
 
-If an Epic feels like it needs more than 2 phases to deliver the visible
-result, split it into two Epics.
-
 ### Mode 2: Transition (previous Epic marked complete)
 
 If the previous phase's NEXT.md says `Status: complete`:
