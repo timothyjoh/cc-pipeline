@@ -41,10 +41,23 @@ If `docs/epics/` doesn't exist or is empty:
 6. Refine Epic 1's Acceptance Criteria based on research.
 7. Write `docs/epics/epic-1-[name].md` as the fully groomed version.
 
-Size guidance: Each Epic should feel like **1–2 phases of work** — a tight,
-focused capability a user can test. If it's bigger, split it into two Epics.
-When in doubt, smaller is better. A well-scoped Epic is one where a developer
-could describe it in a single sentence.
+Size guidance: An Epic is the **smallest piece of functionality where a user
+can open the app, see something meaningful, and confirm it works** — even if
+it's incomplete by the final product's standards. It doesn't need to be fully
+functional end-to-end; it just needs to be real enough that a human can look
+at it and say "yes, that's the thing." Rendering exists without interaction,
+a form exists without validation, a list exists without editing — these are
+all valid Epics. The key question is: *can a user perceive and evaluate this?*
+If yes, it's a good Epic boundary. If it's invisible infrastructure or only
+makes sense in combination with something else, keep splitting or reframe it
+around what the user will actually see.
+
+Phases then break the Epic into even smaller implementation steps — "draw the
+container", "populate it with data", "wire up the interaction" — each one a
+focused build task within the Epic's visible slice.
+
+If an Epic feels like it needs more than 2 phases to deliver the visible
+result, split it into two Epics.
 
 ### Mode 2: Transition (previous Epic marked complete)
 
