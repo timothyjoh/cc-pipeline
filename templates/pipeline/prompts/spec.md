@@ -123,7 +123,8 @@ Each phase should be testable end-to-end: "Can a user do X?" If the answer invol
 ## Phase Sizing — Read This Carefully
 
 A phase should be **small enough that a single agent can finish it cleanly in
-one session**. Epics span 1–2 phases; phases are tight slices within that.
+one session**. Epics can span many phases — that's fine. Your job is to take
+a small, clean slice from wherever the Epic currently stands.
 
 **How to scope this phase:**
 1. Read the Epic's Acceptance Criteria

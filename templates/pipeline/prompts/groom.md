@@ -92,9 +92,10 @@ what you did (which mode, what Epics were created/groomed, or why you skipped).
 
 For Bootstrap and Transition modes, include a line like:
 ```
-Expected phases for Epic 1: 1–2
+Expected phases for Epic 1: [your estimate]
 ```
-This tells the Spec Writer how much to take on per phase.
+This tells the Spec Writer how much to take on per phase. Epics can span
+many phases — there is no upper limit. Estimate honestly.
 
 ## Rules
 
