@@ -10,7 +10,7 @@ import { CodexAgent } from './agents/codex.js';
 import { pipelineEvents } from './events.js';
 import { computeUsagePercentages } from './usage.js';
 
-const MAX_PHASES = 20;
+const DEFAULT_MAX_PHASES = 100;
 
 /**
  * Main pipeline engine loop.
@@ -21,7 +21,7 @@ const MAX_PHASES = 20;
  * - Print banner
  * - Loop through phases, executing steps
  * - Check for PROJECT COMPLETE in reflections
- * - Handle phase limits and MAX_PHASES
+ * - Handle phase limits and maxPhases
  * - Signal handling for clean shutdown
  */
 export async function runEngine(projectDir: string, options: any = {}) {
@@ -40,6 +40,7 @@ export async function runEngine(projectDir: string, options: any = {}) {
 
   // Load config
   const config = loadConfig(projectDir);
+  const maxPhases = config.maxPhases ?? DEFAULT_MAX_PHASES;
 
   // Derive current state
   const state = getCurrentState(logFile);
@@ -110,7 +111,7 @@ export async function runEngine(projectDir: string, options: any = {}) {
 
     const phaseLimit = options.phases || 0;
 
-    while (phase <= MAX_PHASES) {
+    while (phase <= maxPhases) {
       pipelineEvents.emit('phase:start', { phase });
 
       // Execute all steps in phase
@@ -221,7 +222,7 @@ export async function runEngine(projectDir: string, options: any = {}) {
       }
     }
 
-    log(`Hit MAX_PHASES (${MAX_PHASES}). Stopping.`);
+    log(`Hit max phases (${maxPhases}). Stopping.`);
   } finally {
     cleanup();
   }

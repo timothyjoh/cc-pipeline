@@ -19,6 +19,7 @@ export interface PipelineConfig {
   name: string;
   version: number;
   phasesDir: string;
+  maxPhases: number;
   steps: StepConfig[];
   usageCheck: { when: string };
   usageLimits: { sessionBudgetUSD: number; weeklyBudgetUSD: number };
@@ -45,6 +46,7 @@ export function loadConfig(projectDir: string): PipelineConfig {
     name: raw.name || 'Unnamed Pipeline',
     version: raw.version || 1,
     phasesDir: raw.phases_dir || 'docs/phases',
+    maxPhases: raw.max_phases ?? 100,
     steps: [],
     usageCheck: raw.usage_check || { when: 'phase_boundary' },
     usageLimits: {
