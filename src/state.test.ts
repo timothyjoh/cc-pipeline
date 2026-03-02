@@ -357,6 +357,46 @@ test('deriveResumePoint: advance to next phase after last step', () => {
   rmSync(tempDir, { recursive: true });
 });
 
+test('getCurrentState: project_complete returns done state (same as phase_complete)', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'cc-pipeline-test-'));
+  const logFile = join(tempDir, 'pipeline.jsonl');
+
+  const events = [
+    { event: 'step_start', phase: 34, step: 'groom', ts: '2025-01-01T00:00:00Z' },
+    { event: 'step_done', phase: 34, step: 'groom', status: 'ok', ts: '2025-01-01T00:01:00Z' },
+    { event: 'project_complete', phase: 34, ts: '2025-01-01T00:02:00Z' },
+  ];
+  writeFileSync(logFile, events.map(e => JSON.stringify(e)).join('\n') + '\n', 'utf8');
+
+  const state = getCurrentState(logFile);
+
+  assert.strictEqual(state.phase, 34);
+  assert.strictEqual(state.step, 'done');
+  assert.strictEqual(state.status, 'complete');
+
+  rmSync(tempDir, { recursive: true });
+});
+
+test('deriveResumePoint: project_complete advances to next phase first step', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'cc-pipeline-test-'));
+  const logFile = join(tempDir, 'pipeline.jsonl');
+
+  const events = [
+    { event: 'step_start', phase: 34, step: 'spec', ts: '2025-01-01T00:00:00Z' },
+    { event: 'step_done', phase: 34, step: 'spec', status: 'ok', ts: '2025-01-01T00:01:00Z' },
+    { event: 'project_complete', phase: 34, ts: '2025-01-01T00:02:00Z' },
+  ];
+  writeFileSync(logFile, events.map(e => JSON.stringify(e)).join('\n') + '\n', 'utf8');
+
+  const resume = deriveResumePoint(logFile, mockSteps);
+
+  // project_complete is treated as phase_complete — next run starts fresh in the next phase
+  assert.strictEqual(resume.phase, 35);
+  assert.strictEqual(resume.stepName, 'spec');
+
+  rmSync(tempDir, { recursive: true });
+});
+
 test('deriveResumePoint: handles unknown step by starting from beginning', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'cc-pipeline-test-'));
   const logFile = join(tempDir, 'pipeline.jsonl');

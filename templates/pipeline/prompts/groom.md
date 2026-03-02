@@ -14,6 +14,12 @@ Current phase: {{PHASE}}
 
 ## Determine Your Mode
 
+> **Always scan `docs/epics/` before deciding.** Read every file there.
+> A "draft" Epic has a Goal + Acceptance Criteria but an empty or missing
+> `## Research & Decisions` section. If ANY draft Epic exists — even if
+> NEXT.md says "Next: none" or is empty — treat this as Mode 2 (Transition).
+> Only write PROJECT COMPLETE when you have confirmed zero draft Epics remain.
+
 ### Mode 1: Bootstrap (Phase 1, no Epics exist)
 
 If `docs/epics/` doesn't exist or is empty:

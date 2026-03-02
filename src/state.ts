@@ -75,7 +75,7 @@ export function getCurrentState(logFile: string): { phase: number; step: string;
   }
 
   // Find last relevant event
-  const relevantEvents = ['step_start', 'step_done', 'step_skip', 'phase_complete'];
+  const relevantEvents = ['step_start', 'step_done', 'step_skip', 'phase_complete', 'project_complete'];
   const lastEvent = events
     .filter(e => relevantEvents.includes(e.event))
     .pop();
@@ -98,6 +98,11 @@ export function getCurrentState(logFile: string): { phase: number; step: string;
     case 'step_skip':
       return { phase, step, status: 'complete' };
     case 'phase_complete':
+    case 'project_complete':
+      // Treat project_complete the same as phase_complete — resume starts at next phase.
+      // This ensures that if the user adds new Epics after completion and reruns, the
+      // engine advances to the next phase and runs groom fresh rather than resuming
+      // mid-phase after the groom step.
       return { phase, step: 'done', status: 'complete' };
     default:
       return { phase: 1, step: 'pending', status: 'ready' };

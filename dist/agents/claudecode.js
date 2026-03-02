@@ -1,0 +1,156 @@
+import { writeFileSync, appendFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { query } from '@anthropic-ai/claude-agent-sdk';
+import { BaseAgent, agentState } from './base.js';
+import { generatePrompt } from '../prompts.js';
+import { pipelineEvents } from '../events.js';
+import { appendEvent } from '../state.js';
+const DEFAULT_IDLE_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
+/**
+ * ClaudeCode Agent
+ * Runs all AI pipeline steps via the Agent SDK query() API.
+ * Handles spec/research/plan/review/reflect (text streaming) and
+ * build/fix (tool-heavy) steps with the same implementation.
+ *
+ * Watchdog: if no writes to the step log occur for idleTimeoutMs, the query
+ * is aborted and exitCode 1 is returned so the engine retry logic kicks in.
+ */
+export class ClaudeCodeAgent extends BaseAgent {
+    async run(phase, step, promptPath, model, context) {
+        const { projectDir, config } = context;
+        const pipelineDir = join(projectDir, '.pipeline');
+        const logDir = join(pipelineDir, 'logs', `phase-${phase}`);
+        mkdirSync(logDir, { recursive: true });
+        const outputPath = join(logDir, `step-${step.name}.log`);
+        const promptText = generatePrompt(projectDir, config, phase, promptPath);
+        writeFileSync(join(pipelineDir, 'current-prompt.md'), promptText, 'utf-8');
+        if (agentState.interrupted) {
+            return { exitCode: 130, outputPath };
+        }
+        const controller = new AbortController();
+        const onInterrupt = () => controller.abort();
+        agentState.on('interrupt', onInterrupt);
+        // Clear output file so TUI file-tailer sees only this step's content
+        writeFileSync(outputPath, '', 'utf-8');
+        // Watchdog: tracks time of last write to outputPath
+        const idleTimeoutMs = step.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
+        const watchdogIntervalMs = Math.min(60_000, Math.ceil(idleTimeoutMs / 3));
+        let lastActivityMs = Date.now();
+        let watchdogFired = false;
+        const appendOutput = (line) => {
+            try {
+                const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
+                appendFileSync(outputPath, `[${ts}] ${line}\n`, 'utf-8');
+                lastActivityMs = Date.now();
+            }
+            catch (_) { }
+        };
+        const watchdog = setInterval(() => {
+            const idleMs = Date.now() - lastActivityMs;
+            if (idleMs >= idleTimeoutMs) {
+                const idleMin = Math.round(idleMs / 60_000);
+                appendOutput(`[watchdog] idle ${idleMin}m — aborting`);
+                if (context.logFile) {
+                    try {
+                        appendEvent(context.logFile, {
+                            event: 'watchdog_timeout',
+                            phase,
+                            step: step.name,
+                            idle_ms: idleMs,
+                        });
+                    }
+                    catch (_) { }
+                }
+                watchdogFired = true;
+                controller.abort();
+            }
+        }, watchdogIntervalMs);
+        const outputChunks = [];
+        let stepCostUSD = 0;
+        try {
+            const queryOptions = {
+                maxTurns: 500,
+                permissionMode: 'bypassPermissions',
+                // Unset CLAUDECODE to prevent SDK conflict when running inside Claude Code
+                env: { ...process.env, CLAUDECODE: undefined },
+                hooks: {
+                    PreToolUse: [{ hooks: [async (data) => {
+                                    appendOutput(`[tool:start] ${data.tool_name} ${JSON.stringify(data.tool_input ?? {}).slice(0, 120)}`);
+                                }] }],
+                    PostToolUse: [{ hooks: [async (data) => {
+                                    const success = !data.tool_response?.is_error;
+                                    appendOutput(`[tool:done]  ${data.tool_name} ${success ? '✓' : '✗'}`);
+                                }] }],
+                    SubagentStart: [{ hooks: [async (data) => {
+                                    appendOutput(`[subagent:start] ${data.agent_id ?? ''}`);
+                                }] }],
+                    SubagentStop: [{ hooks: [async (data) => {
+                                    appendOutput(`[subagent:done]  ${data.agent_id ?? ''}`);
+                                }] }],
+                    Stop: [{ hooks: [async (_data) => { }] }],
+                },
+            };
+            if (model && model !== 'default') {
+                queryOptions.model = model;
+            }
+            queryOptions.abortController = controller;
+            for await (const event of query({
+                prompt: promptText,
+                options: queryOptions,
+            })) {
+                if (event.type === 'assistant' && event.message?.role === 'assistant') {
+                    for (const block of event.message.content ?? []) {
+                        if (block.type === 'text') {
+                            const text = block.text;
+                            outputChunks.push(text);
+                            // Stream text lines to output file for TUI file-tailing
+                            const textLines = text
+                                .split('\n')
+                                .map(l => l.trim())
+                                .filter(l => l.length > 0)
+                                .map(l => '[text] ' + l)
+                                .join('\n');
+                            if (textLines)
+                                appendOutput(textLines);
+                            pipelineEvents.emit('text:chunk', { phase, step: step.name, text });
+                        }
+                    }
+                }
+                if (event.type === 'result') {
+                    stepCostUSD = event.total_cost_usd ?? 0;
+                    const reason = event.stop_reason ?? 'end_turn';
+                    pipelineEvents.emit('session:stop', { phase, step: step.name, reason });
+                }
+            }
+        }
+        catch (err) {
+            if (agentState.interrupted) {
+                appendOutput(outputChunks.join('\n'));
+                return { exitCode: 130, outputPath };
+            }
+            if (watchdogFired) {
+                // appendOutput already wrote the watchdog message; return error for retry
+                return { exitCode: 1, outputPath };
+            }
+            const errorText = `Error: ${err.message}\n${err.stack ?? ''}`;
+            writeFileSync(outputPath, errorText, 'utf-8');
+            return { exitCode: 1, outputPath };
+        }
+        finally {
+            clearInterval(watchdog);
+            agentState.off('interrupt', onInterrupt);
+        }
+        // Write final collected output (for steps without streaming, e.g. build)
+        if (outputChunks.length > 0) {
+            writeFileSync(outputPath, outputChunks.join('\n'), 'utf-8');
+        }
+        if (agentState.interrupted) {
+            return { exitCode: 130, outputPath };
+        }
+        return { exitCode: 0, outputPath, usage: { costUSD: stepCostUSD } };
+    }
+}
+export function createAgent() {
+    return new ClaudeCodeAgent();
+}
+//# sourceMappingURL=claudecode.js.map
