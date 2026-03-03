@@ -102,19 +102,27 @@ The pipeline resumes from interruptions automatically. Press **Ctrl-C** to pause
 
 The pipeline works in **phases**, each representing a unit of progress (e.g., "user authentication", "payment integration"). Each phase follows the same workflow of steps.
 
+### Epics
+
+The pipeline organizes work into **Epics** — vertical slices of user-testable value stored in `docs/epics/`. Each Epic represents a real capability a user can open, see, and evaluate (e.g., "User can sign up and log in", not "Set up the database").
+
+The `groom` step manages Epics automatically: bootstrapping them from your `BRIEF.md` on phase 1, transitioning to the next Epic when one is complete, and skipping when work is already in progress.
+
 ### Steps
 
 Each phase runs through these steps (defined in `.pipeline/workflow.yaml`):
 
-1. **spec** — Break the project vision into a phase spec
-2. **research** — Analyze the current codebase state
-3. **plan** — Create an actionable implementation plan
-4. **build** — Implement the plan
-5. **review** — Staff engineer-level code review
-6. **fix** — Address review findings (skipped if none)
-7. **reflect** — Look back at progress, plan the next phase
-8. **status** — Update `STATUS.md` with build summary, test coverage, and what's next
-9. **commit** — Git commit and push
+1. **groom** — Bootstrap Epics from `BRIEF.md` (phase 1), transition to next Epic, or skip if current Epic is in-progress
+2. **spec** — Break the current Epic into a phase spec
+3. **research** — Analyze the current codebase state
+4. **plan** — Create an actionable implementation plan
+5. **build** — Implement the plan
+6. **review** — Staff engineer-level code review
+7. **fix** — Address review findings (skipped if none)
+8. **reflect** — Look back at what happened this phase; update the Epic's remaining work
+9. **next** — Write a short `NEXT.md` steering pointer (which Epic, in-progress or complete)
+10. **status** — Update `STATUS.md` with build summary, test coverage, and what's next
+11. **commit** — Git commit and push
 
 ### Agents
 
@@ -130,7 +138,7 @@ Pipeline state lives in `.pipeline/pipeline.jsonl` — an append-only event log.
 
 ### Project Completion
 
-When Claude determines the project is complete, it writes `PROJECT COMPLETE` in `REFLECTIONS.md`. The pipeline stops automatically.
+When all Epics are finished, the `groom` step writes `PROJECT COMPLETE` in `GROOM.md`. The pipeline stops automatically. To continue development, add a new Epic file to `docs/epics/` and run again.
 
 ## Configuration
 
@@ -161,6 +169,11 @@ steps:
     agent: claudecode
     prompt: prompts/fix.md
     skip_unless: "MUST-FIX.md"    # Only runs if review produced MUST-FIX.md
+```
+
+**Set a phase limit (default is 100):**
+```yaml
+max_phases: 50
 ```
 
 **Customize prompts:** Edit the markdown files in `.pipeline/prompts/` to change how each step behaves.
@@ -205,6 +218,7 @@ your-project/
 │   ├── workflow.yaml        # Step definitions, agents, models
 │   ├── pipeline.jsonl       # Event log (auto-created on first run)
 │   └── prompts/             # Prompt templates (customizable)
+│       ├── groom.md
 │       ├── spec.md
 │       ├── research.md
 │       ├── plan.md
@@ -212,15 +226,21 @@ your-project/
 │       ├── review.md
 │       ├── fix.md
 │       ├── reflect.md
+│       ├── next.md
 │       └── status.md
 ├── docs/
+│   ├── epics/               # Epic definitions (managed by groom step)
+│   │   ├── epic-1-auth.md
+│   │   └── epic-2-dashboard.md
 │   └── phases/
 │       ├── phase-1/         # Phase artifacts
+│       │   ├── GROOM.md
 │       │   ├── SPEC.md
 │       │   ├── RESEARCH.md
 │       │   ├── PLAN.md
 │       │   ├── REVIEW.md
-│       │   └── REFLECTIONS.md
+│       │   ├── REFLECTIONS.md
+│       │   └── NEXT.md
 │       └── phase-2/
 │           └── ...
 ├── BRIEF.md                 # Your project vision

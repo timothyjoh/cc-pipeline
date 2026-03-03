@@ -48,19 +48,21 @@ npx cc-pipeline@latest status
 
 Each phase runs through these steps in order:
 
-1. **spec** — Break the project vision into a phase spec
-2. **research** — Analyze the current codebase
-3. **plan** — Create an implementation plan
-4. **build** — Implement the plan (interactive Claude in tmux)
-5. **review** — Staff engineer-level code review
-6. **fix** — Address review findings (if any)
-7. **reflect** — Look back and plan the next phase
-8. **status** — Update STATUS.md with what was built, how to run it, review findings, test coverage, and what's next
-9. **commit** — Git commit and push
+1. **groom** — Bootstrap Epics from `BRIEF.md` (phase 1), transition to the next Epic, or skip if the current Epic is already in-progress
+2. **spec** — Break the current Epic into a phase spec
+3. **research** — Analyze the current codebase
+4. **plan** — Create an implementation plan
+5. **build** — Implement the plan (interactive Claude in tmux)
+6. **review** — Staff engineer-level code review
+7. **fix** — Address review findings (if any)
+8. **reflect** — Look back and update the Epic's remaining work
+9. **next** — Write a short `NEXT.md` steering pointer (which Epic, in-progress or complete)
+10. **status** — Update STATUS.md with what was built, how to run it, review findings, test coverage, and what's next
+11. **commit** — Git commit and push
 
-Phase outputs are saved to `docs/phases/phase-N/`.
+Phase outputs are saved to `docs/phases/phase-N/`. Epics live in `docs/epics/`.
 
-The pipeline stops automatically when the project is complete (`PROJECT COMPLETE` in REFLECTIONS.md).
+The pipeline stops automatically when all Epics are complete (`PROJECT COMPLETE` in `GROOM.md`).
 
 ## Adding New Epics
 
