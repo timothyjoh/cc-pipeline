@@ -138,7 +138,37 @@ Pipeline state lives in `.pipeline/pipeline.jsonl` — an append-only event log.
 
 ### Project Completion
 
-When all Epics are finished, the `groom` step writes `PROJECT COMPLETE` in `GROOM.md`. The pipeline stops automatically. To continue development, add a new Epic file to `docs/epics/` and run again.
+When all Epics are finished, the `groom` step writes `PROJECT COMPLETE` in `GROOM.md`. The pipeline stops automatically.
+
+### Continuing Development Beyond the Initial Brief
+
+Epics are the primary way to extend a project after the initial build. Your `BRIEF.md` is immutable — it's the original vision — but you can keep adding Epics to `docs/epics/` indefinitely.
+
+**To add a new Epic**, create a file like `docs/epics/epic-4-short-name.md` (increment the number) with just a Goal and Acceptance Criteria:
+
+```markdown
+# Epic 4: [Short descriptive name]
+
+## Goal
+What the user can do when this Epic is complete. Must be something
+a user can open, see, and evaluate — not an infrastructure task.
+
+## Acceptance Criteria
+- [ ] Observable thing a user can do or see
+- [ ] Another testable outcome
+```
+
+The `groom` step will handle research and planning detail — you only need to express intent. Once the file exists, run `npx cc-pipeline run` and it picks up from there.
+
+**Good Epics** are vertical slices of user-testable value:
+- ✅ "User can filter and search results"
+- ✅ "Admin can export data as CSV"
+- ❌ "Refactor the API layer" (infrastructure, not user-visible)
+
+You can also ask Claude Code to help write the next Epic based on what's already been built:
+```
+Look at docs/epics/ and STATUS.md, then help me write the next Epic.
+```
 
 ## Configuration
 

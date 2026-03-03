@@ -69,14 +69,26 @@ The pipeline stops automatically when all Epics are complete (`PROJECT COMPLETE`
 The pipeline works through `docs/epics/` one Epic at a time. When all Epics are
 complete the pipeline stops. To continue development, add a new Epic and run again.
 
-**Epic files** live at `docs/epics/epic-N.md` where N is the next number in sequence.
-Check what exists and increment: if `epic-3.md` is the last one, create `epic-4.md`.
+### Quick way — ask Claude Code to help
 
-**Minimum viable Epic** — the pipeline's groom step will fill in research and detail,
+Open Claude Code in your project and say:
+
+```
+Look at the existing Epics in docs/epics/ and STATUS.md, then help me
+write the next Epic. Ask me what capability I want to add, then draft
+the Epic file following the existing naming convention.
+```
+
+### Manual way — create the file yourself
+
+**Epic files** live at `docs/epics/epic-N-short-name.md` where N is the next number in sequence.
+Check what exists and increment: if `epic-3-payments.md` is the last one, create `epic-4-short-name.md`.
+
+**Minimum viable Epic** — the `groom` step will research and fill in detail,
 so you only need to provide intent:
 
 ```markdown
-# Epic N: [Short name]
+# Epic N: [Short descriptive name]
 
 ## Goal
 [One paragraph: what the user can do when this Epic is complete.
@@ -85,13 +97,17 @@ so you only need to provide intent:
 ## Acceptance Criteria
 - [ ] [Specific, observable thing a user can do or see]
 - [ ] [Another testable outcome]
+- [ ] [Another testable outcome]
 ```
 
 **Rules for good Epics:**
-- Each Epic is a vertical slice — the user can test and get value from it independently
+- Each Epic is a **vertical slice** — the user can see and test it independently
 - Avoid infrastructure Epics ("set up the database", "add an API layer") — frame around user actions instead
-- Size them to feel like 2–4 phases of work; the groom step will flag if it seems too large
+  - ❌ "Epic 3: Refactor the data layer"
+  - ✅ "Epic 3: User can filter and search results"
+- Size them to feel like 2–4 phases of work; the groom step will estimate phases for you
 - One Epic at a time is fine — you don't need to plan the whole future upfront
+- Don't add a `## Research & Decisions` section — groom will write that
 
 Once the file exists, just run `npx cc-pipeline run` and the pipeline picks it up automatically.
 
