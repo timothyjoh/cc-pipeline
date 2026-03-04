@@ -2,6 +2,8 @@
 
 **Autonomous Claude Code pipeline engine.** Install into any repo, write a BRIEF.md describing your project, and let Claude build it phase by phase.
 
+Read the intro blog post (a week outdated) [https://curiousagents.substack.com/](https://curiousagents.substack.com/p/experiments-in-building-an-automatic)
+
 ## What Is This?
 
 cc-pipeline orchestrates autonomous development workflows using Claude Code. You provide a project vision in plain language, and the pipeline:
